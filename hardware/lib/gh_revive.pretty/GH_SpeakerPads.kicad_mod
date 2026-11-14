@@ -1,0 +1,13 @@
+(footprint "GH_SpeakerPads"
+	(version 20240108)
+	(generator "ghrevive")
+	(layer "F.Cu")
+	(descr "2 solder pads for speaker wires")
+	(property "Reference" "REF**" (at 0 -2.450 0) (layer "F.SilkS") (effects (font (size 0.8 0.8) (thickness 0.12))))
+	(property "Value" "GH_SpeakerPads" (at 0 2.450 0) (layer "F.Fab") (effects (font (size 0.8 0.8) (thickness 0.12))))
+	(attr smd exclude_from_pos_files exclude_from_bom)
+	(fp_rect (start -2.600 -1.450) (end 2.600 1.450) (stroke (width 0.05) (type solid)) (fill no) (layer "F.CrtYd"))
+	(fp_rect (start -2.450 -1.300) (end 2.450 1.300) (stroke (width 0.1) (type solid)) (fill no) (layer "F.Fab"))
+	(pad "1" smd roundrect (at -1.350 0.000) (size 2.000 2.400) (layers "F.Cu" "F.Paste" "F.Mask") (roundrect_rratio 0.2))
+	(pad "2" smd roundrect (at 1.350 0.000) (size 2.000 2.400) (layers "F.Cu" "F.Paste" "F.Mask") (roundrect_rratio 0.2))
+)

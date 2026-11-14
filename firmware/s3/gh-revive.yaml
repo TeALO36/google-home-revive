@@ -1,0 +1,532 @@
+# GH-Revive - ESP32-S3 main firmware (ESPHome).
+#
+#   esphome config  firmware/s3/gh-revive.yaml     # validate
+#   esphome run     firmware/s3/gh-revive.yaml     # build + flash over USB-C, then OTA
+#
+# Pin map: docs/cahier_des_charges.md, section 10. Secrets: copy secrets.example.yaml to secrets.yaml.
+
+substitutions:
+  name: gh-revive
+  friendly_name: GH Revive
+  led_count: "12"
+  touch_address: "0x5B"
+  amp_address: "0x2C"
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+  min_version: 2025.5.0
+  includes:
+    - ring_gesture.h
+  on_boot:
+    - priority: 600
+      then:
+        - output.turn_on: bt_enable
+        - output.turn_on: bt_boot
+    - priority: -100
+      then:
+        - script.execute: amp_start
+        - script.execute: led_idle
+
+esp32:
+  board: esp32-s3-devkitc-1
+  flash_size: 16MB
+  framework:
+    type: esp-idf
+    sdkconfig_options:
+      CONFIG_ESP32S3_DATA_CACHE_64KB: "y"
+      CONFIG_ESP32S3_DATA_CACHE_LINE_64B: "y"
+      CONFIG_ESP32S3_INSTRUCTION_CACHE_32KB: "y"
+
+psram:
+  mode: octal
+  speed: 80MHz
+
+logger:
+  hardware_uart: USB_SERIAL_JTAG
+
+api:
+  encryption:
+    key: !secret api_key
+  on_client_connected:
+    - micro_wake_word.start:
+  on_client_disconnected:
+    - voice_assistant.stop:
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "GH-Revive Setup"
+    password: !secret ap_password
+
+captive_portal:
+
+# ------------------------------------------------------------------ buses
+
+i2c:
+  id: bus_i2c
+  sda: GPIO16
+  scl: GPIO17
+  frequency: 400kHz
+
+i2c_device:
+  id: amp_i2c
+  i2c_id: bus_i2c
+  address: ${amp_address}
+
+i2s_audio:
+  - id: i2s_mic
+    i2s_lrclk_pin: GPIO4  # PDM clock, gated by the hardware mute buffer
+  - id: i2s_amp
+    i2s_lrclk_pin: GPIO10
+    i2s_bclk_pin: GPIO9
+
+uart:
+  id: bt_uart
+  tx_pin: GPIO42
+  rx_pin: GPIO41
+  baud_rate: 115200
+  debug:
+    direction: RX
+    dummy_receiver: true
+    after:
+      delimiter: "\n"
+    sequence:
+      - lambda: |-
+          std::string line(bytes.begin(), bytes.end());
+          while (!line.empty() && (line.back() == '\n' || line.back() == '\r')) {
+            line.pop_back();
+          }
+          if (!line.empty()) {
+            id(bt_status).publish_state(line);
+          }
+
+# ------------------------------------------------------------------ audio
+
+microphone:
+  - platform: i2s_audio
+    id: mic
+    i2s_audio_id: i2s_mic
+    adc_type: external
+    pdm: true
+    i2s_din_pin: GPIO5
+    channel: left  # MIC1 (SELECT = GND); MIC2 answers on the right slot
+    sample_rate: 16000
+    bits_per_sample: 16bit
+
+speaker:
+  - platform: i2s_audio
+    id: amp_out
+    i2s_audio_id: i2s_amp
+    dac_type: external
+    i2s_dout_pin: GPIO11
+    sample_rate: 48000
+    bits_per_sample: 16bit
+    channel: stereo
+    buffer_duration: 100ms
+    timeout: never
+  - platform: mixer
+    id: audio_mixer
+    output_speaker: amp_out
+    num_channels: 2
+    source_speakers:
+      - id: announcement_input
+        timeout: never
+      - id: media_input
+        timeout: never
+  - platform: resampler
+    id: announcement_resampler
+    output_speaker: announcement_input
+  - platform: resampler
+    id: media_resampler
+    output_speaker: media_input
+
+media_player:
+  - platform: speaker
+    id: player
+    name: None
+    volume_increment: 0.05
+    volume_min: 0.0
+    volume_max: 0.9
+    announcement_pipeline:
+      speaker: announcement_resampler
+      format: FLAC
+      num_channels: 1
+      sample_rate: 48000
+    media_pipeline:
+      speaker: media_resampler
+      format: FLAC
+      num_channels: 2
+      sample_rate: 48000
+    on_announcement:
+      - mixer_speaker.apply_ducking:
+          id: media_input
+          decibel_reduction: 20
+          duration: 0.0s
+    on_idle:
+      - mixer_speaker.apply_ducking:
+          id: media_input
+          decibel_reduction: 0
+          duration: 1.0s
+
+micro_wake_word:
+  id: mww
+  microphone: mic
+  stop_after_detection: false
+  models:
+    - model: hey_jarvis
+  on_wake_word_detected:
+    - voice_assistant.start:
+        wake_word: !lambda return wake_word;
+
+voice_assistant:
+  id: va
+  microphone: mic
+  media_player: player
+  micro_wake_word: mww
+  noise_suppression_level: 2
+  auto_gain: 31dBFS
+  volume_multiplier: 2.0
+  on_listening:
+    - mixer_speaker.apply_ducking:
+        id: media_input
+        decibel_reduction: 20
+        duration: 0.0s
+    - light.turn_on:
+        id: ring
+        brightness: 60%
+        red: 0%
+        green: 40%
+        blue: 100%
+        effect: Ecoute
+  on_stt_vad_end:
+    - light.turn_on:
+        id: ring
+        effect: Reflexion
+  on_end:
+    - wait_until:
+        not:
+          media_player.is_announcing: player
+    - mixer_speaker.apply_ducking:
+        id: media_input
+        decibel_reduction: 0
+        duration: 1.0s
+    - script.execute: led_idle
+  on_error:
+    - light.turn_on:
+        id: ring
+        brightness: 60%
+        red: 100%
+        green: 30%
+        blue: 0%
+        effect: none
+    - delay: 1s
+    - script.execute: led_idle
+
+# ------------------------------------------------------------------ amplifier (TAS5805M)
+
+output:
+  - platform: gpio
+    id: amp_pdn
+    pin: GPIO13
+  - platform: gpio
+    id: bt_enable  # high = Bluetooth module running (EN through R9)
+    pin: GPIO2
+  - platform: gpio
+    id: bt_boot  # high = normal boot, low during reset = download mode
+    pin: GPIO1
+
+script:
+  - id: amp_start
+    mode: restart
+    then:
+      - output.turn_off: amp_pdn
+      - delay: 10ms
+      - output.turn_on: amp_pdn
+      - delay: 10ms
+      - lambda: |-
+          // page 0 / book 0, Hi-Z, 0 dB digital volume, then Play (TAS5805M datasheet, startup procedure)
+          const uint8_t sequence[][2] = {{0x00, 0x00}, {0x7F, 0x00}, {0x03, 0x02}, {0x4C, 0x30}, {0x54, 0x00}};
+          for (const auto &reg : sequence) {
+            if (!id(amp_i2c).write_byte(reg[0], reg[1])) {
+              ESP_LOGE("amp", "TAS5805M write 0x%02X failed (address ${amp_address})", reg[0]);
+              return;
+            }
+          }
+      - delay: 5ms
+      - lambda: |-
+          if (!id(amp_i2c).write_byte(0x03, 0x03) || !id(amp_i2c).write_byte(0x78, 0x80)) {
+            ESP_LOGE("amp", "TAS5805M play / fault clear failed");
+          }
+
+  # ---------------------------------------------------------------- LED ring
+  - id: led_idle
+    mode: restart
+    then:
+      - if:
+          condition:
+            binary_sensor.is_on: mute_state
+          then:
+            - light.turn_on:
+                id: ring
+                brightness: 40%
+                red: 100%
+                green: 0%
+                blue: 0%
+                effect: none
+          else:
+            - light.turn_off: ring
+
+  - id: led_volume
+    mode: restart
+    then:
+      - light.turn_on:
+          id: ring
+          brightness: 50%
+          red: 0%
+          green: 0%
+          blue: 0%
+          effect: none
+      - light.addressable_set:
+          id: ring
+          range_from: 0
+          range_to: !lambda |-
+            const int lit = static_cast<int>(roundf(id(player).volume * ${led_count}));
+            return std::max(0, std::min(${led_count} - 1, lit - 1));
+          red: 100%
+          green: 100%
+          blue: 100%
+      - delay: 1500ms
+      - script.execute: led_idle
+
+  # ---------------------------------------------------------------- touch ring
+  - id: ring_input
+    mode: queued
+    max_runs: 20
+    parameters:
+      sector: int
+      pressed: bool
+    then:
+      - lambda: |-
+          const uint32_t now = millis();
+          const ring::Event event = pressed ? id(ring_decoder).press(sector, now)
+                                            : id(ring_decoder).release(sector, now);
+          if (event != ring::Event::None) {
+            id(ring_event)->execute(static_cast<int>(event));
+          }
+
+  - id: ring_event
+    mode: queued
+    max_runs: 10
+    parameters:
+      code: int
+    then:
+      - if:
+          condition:
+            lambda: return code == static_cast<int>(ring::Event::VolumeUp);
+          then:
+            - media_player.volume_up: player
+            - script.execute: led_volume
+      - if:
+          condition:
+            lambda: return code == static_cast<int>(ring::Event::VolumeDown);
+          then:
+            - media_player.volume_down: player
+            - script.execute: led_volume
+      - if:
+          condition:
+            lambda: return code == static_cast<int>(ring::Event::Tap);
+          then:
+            - if:
+                condition:
+                  voice_assistant.is_running:
+                then:
+                  - voice_assistant.stop:
+                else:
+                  - media_player.toggle: player
+                  - homeassistant.event:
+                      event: esphome.gh_revive_gesture
+                      data:
+                        gesture: tap
+      - if:
+          condition:
+            lambda: return code == static_cast<int>(ring::Event::DoubleTap);
+          then:
+            - homeassistant.event:
+                event: esphome.gh_revive_gesture
+                data:
+                  gesture: double_tap
+
+globals:
+  - id: ring_decoder
+    type: ring::Decoder
+    restore_value: false
+
+interval:
+  - interval: 50ms
+    then:
+      - lambda: |-
+          const ring::Event event = id(ring_decoder).poll(millis());
+          if (event != ring::Event::None) {
+            id(ring_event)->execute(static_cast<int>(event));
+          }
+
+mpr121:
+  id: touch
+  i2c_id: bus_i2c
+  address: ${touch_address}
+  touch_debounce: 1
+  release_debounce: 1
+  touch_threshold: 10  # tuned through the plastic: lower = more sensitive
+  release_threshold: 6
+
+light:
+  - platform: esp32_rmt_led_strip
+    id: ring
+    name: Anneau
+    pin: GPIO6
+    num_leds: ${led_count}
+    rgb_order: GRB
+    chipset: WS2812
+    color_correct: [50%, 50%, 50%]  # 12 LEDs at full white = 0.2 A on the +5V link wire
+    default_transition_length: 200ms
+    effects:
+      - addressable_scan:
+          name: Ecoute
+          move_interval: 60ms
+          scan_width: 3
+      - pulse:
+          name: Reflexion
+          transition_length: 400ms
+          update_interval: 400ms
+
+# ------------------------------------------------------------------ sensors and controls
+
+binary_sensor:
+  - platform: gpio
+    id: mute_state
+    name: Micros coupes
+    pin: GPIO7  # 1 = muted by the hardware switch (PDM clock gated)
+    on_press:
+      - micro_wake_word.stop:
+      - voice_assistant.stop:
+      - script.execute: led_idle
+    on_release:
+      - micro_wake_word.start:
+      - script.execute: led_idle
+  - platform: gpio
+    id: amp_fault
+    name: Defaut ampli
+    entity_category: diagnostic
+    pin:
+      number: GPIO14
+      mode: INPUT_PULLUP
+      inverted: true  # FAULTZ is open drain, active low
+    on_press:
+      - logger.log:
+          level: ERROR
+          format: "TAS5805M fault, restarting the amplifier"
+      - script.execute: amp_start
+  - platform: gpio
+    id: bt_connected
+    name: Bluetooth connecte
+    pin: GPIO21  # IO22 of the Bluetooth module, high while an A2DP source is connected
+  - platform: mpr121
+    id: sector_0
+    channel: 0
+    internal: true
+    on_press: [{script.execute: {id: ring_input, sector: 0, pressed: true}}]
+    on_release: [{script.execute: {id: ring_input, sector: 0, pressed: false}}]
+  - platform: mpr121
+    id: sector_1
+    channel: 1
+    internal: true
+    on_press: [{script.execute: {id: ring_input, sector: 1, pressed: true}}]
+    on_release: [{script.execute: {id: ring_input, sector: 1, pressed: false}}]
+  - platform: mpr121
+    id: sector_2
+    channel: 2
+    internal: true
+    on_press: [{script.execute: {id: ring_input, sector: 2, pressed: true}}]
+    on_release: [{script.execute: {id: ring_input, sector: 2, pressed: false}}]
+  - platform: mpr121
+    id: sector_3
+    channel: 3
+    internal: true
+    on_press: [{script.execute: {id: ring_input, sector: 3, pressed: true}}]
+    on_release: [{script.execute: {id: ring_input, sector: 3, pressed: false}}]
+  - platform: mpr121
+    id: sector_4
+    channel: 4
+    internal: true
+    on_press: [{script.execute: {id: ring_input, sector: 4, pressed: true}}]
+    on_release: [{script.execute: {id: ring_input, sector: 4, pressed: false}}]
+  - platform: mpr121
+    id: sector_5
+    channel: 5
+    internal: true
+    on_press: [{script.execute: {id: ring_input, sector: 5, pressed: true}}]
+    on_release: [{script.execute: {id: ring_input, sector: 5, pressed: false}}]
+  - platform: mpr121
+    id: sector_6
+    channel: 6
+    internal: true
+    on_press: [{script.execute: {id: ring_input, sector: 6, pressed: true}}]
+    on_release: [{script.execute: {id: ring_input, sector: 6, pressed: false}}]
+  - platform: mpr121
+    id: sector_7
+    channel: 7
+    internal: true
+    on_press: [{script.execute: {id: ring_input, sector: 7, pressed: true}}]
+    on_release: [{script.execute: {id: ring_input, sector: 7, pressed: false}}]
+  - platform: mpr121
+    id: sector_8
+    channel: 8
+    internal: true
+    on_press: [{script.execute: {id: ring_input, sector: 8, pressed: true}}]
+    on_release: [{script.execute: {id: ring_input, sector: 8, pressed: false}}]
+  - platform: mpr121
+    id: sector_9
+    channel: 9
+    internal: true
+    on_press: [{script.execute: {id: ring_input, sector: 9, pressed: true}}]
+    on_release: [{script.execute: {id: ring_input, sector: 9, pressed: false}}]
+
+switch:
+  - platform: gpio
+    id: mute_force
+    name: Forcer la coupure micros
+    pin:
+      number: GPIO15
+      inverted: true  # MUTE_SET_N, active low
+    restore_mode: ALWAYS_OFF
+
+text_sensor:
+  - platform: template
+    id: bt_status
+    name: Bluetooth etat
+    entity_category: diagnostic
+
+button:
+  - platform: template
+    name: Appairage Bluetooth
+    on_press:
+      - uart.write:
+          id: bt_uart
+          data: "PAIR\n"
+  - platform: template
+    name: Redemarrer module Bluetooth
+    entity_category: config
+    on_press:
+      - output.turn_on: bt_boot
+      - output.turn_off: bt_enable
+      - delay: 50ms
+      - output.turn_on: bt_enable
+  - platform: restart
+    name: Redemarrer
+    entity_category: config

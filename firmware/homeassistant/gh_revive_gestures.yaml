@@ -1,0 +1,16 @@
+# Home Assistant automation: ring gestures sent by the device (event esphome.gh_revive_gesture).
+# Tap already toggles play/pause on the device itself; double tap skips to the next track of the
+# music player that streams to it. Adjust `music_player` to your Music Assistant / media player entity.
+alias: GH Revive - gestes de l'anneau
+mode: queued
+variables:
+  music_player: media_player.gh_revive
+triggers:
+  - trigger: event
+    event_type: esphome.gh_revive_gesture
+    event_data:
+      gesture: double_tap
+actions:
+  - action: media_player.media_next_track
+    target:
+      entity_id: "{{ music_player }}"
