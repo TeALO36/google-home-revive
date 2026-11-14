@@ -22,7 +22,7 @@ ROUTER_TIMEOUT_S = 1800
 CLEARANCE_MARGIN_UM = 2.0
 # FreeRouting results vary from run to run: strategies are cycled until nothing is left or MAX_RETRIES is reached
 RETRY_STRATEGIES = (("-is", "random"), ("-us", "hybrid", "-hr", "1:1"), ("-is", "prioritized"))
-MAX_RETRIES = 6
+MAX_RETRIES = 9
 
 
 def _mark_plane_layers(dsn: Path, spec: BoardSpec) -> None:

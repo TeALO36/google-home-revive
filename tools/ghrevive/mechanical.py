@@ -76,6 +76,7 @@ class TopBoardDims:
     bottom_notch_depth: float = 2.3
     electrode_inner: float = 14.8  # clears the outer J-leads of the 3.5 mm LEDs (r = 10.48 + 3.6)
     electrode_outer: float = 35.6
+    centre_electrode_radius: float = 4.3  # tap button inside the LED ring (inner LED pads at r = 6.9)
     sectors: int = 10
     sector_gap: float = 0.8
     sector_zigzag_deg: float = 9.0

@@ -5,7 +5,7 @@ assistant vocal local et ouvert sous **Home Assistant** (ESPHome). Le boîtier, 
 d'origine sont conservés ; l'électronique Google est remplacée.
 
 - Carte mère : même forme et mêmes trous de fixation que l'originale, USB-C, ampli classe D, coupure micro matérielle.
-- Carte du dessus : 2 micros numériques, anneau de 12 LED, anneau tactile capacitif.
+- Carte du dessus : 2 micros numériques, anneau de 12 LED RGB, anneau tactile capacitif et touche centrale.
 - Liaison entre les deux cartes : 10 fils soudés (des câbles Dupont coupés suffisent).
 - **Les pièces délicates sont soudées en usine par JLCPCB** (micros, contrôleur tactile, ampli, USB-C, tous les petits
   passifs). Il reste à souder au fer des pièces à pattes visibles, listées plus bas avec leur emplacement.
@@ -30,8 +30,8 @@ Les deux cartes passent le contrôle DRC de KiCad sans erreur ni connexion manqu
 | Annulation d'écho | référence I2S renvoyée par l'ampli (SDOUT du TAS5805M) vers l'S3 |
 | Ampli | TI TAS5805M (I2S, DSP intégré, pont BTL) |
 | Bluetooth | ESP32-WROOM-32E dédié en récepteur A2DP, flashé à travers l'S3 |
-| Tactile | MPR121, 10 secteurs : rotation horaire = volume +, antihoraire = volume -, tap = pause / lecture, double tap = piste suivante |
-| LED | 12 WS2812B-MINI-V3J (3,5 x 3,5 mm, pattes en J soudables au fer) sous le diffuseur d'origine |
+| Tactile | MPR121 : anneau de 10 secteurs (rotation horaire = volume +, antihoraire = volume -) et touche ronde au centre ; appui bref n'importe où = pause / lecture, double appui = piste suivante |
+| LED | 12 LED RGB adressables WS2812B-MINI-V3J (couleur 24 bits réglable LED par LED) sous le diffuseur d'origine : animations arc-en-ciel, comète, scintillement, etc., pilotables depuis Home Assistant |
 | Coupure micro | interrupteur matériel : l'horloge des micros est coupée physiquement, l'état est lu par l'S3 |
 | Alimentation / service | USB-C vertical (flash, journaux) |
 | Configuration Wi-Fi | point d'accès + page de configuration, l'adresse IP est annoncée à voix haute |
@@ -107,6 +107,15 @@ Les deux cartes se paient ensemble dans le panier. Appliquer le coupon SMT mensu
 Avant de commander, vérifier la mécanique (section 8 du cahier des charges) sur l'appareil réel.
 
 ## Ce qu'il faut souder soi-même
+
+<p align="center">
+  <a href="docs/manuel_soudure.md">
+    <img src="https://img.shields.io/badge/MANUEL%20DE%20SOUDURE-liste%20par%20face%2C%20o%C3%B9%20et%20comment%20souder-F08C1E?style=for-the-badge" alt="Manuel de soudure : liste des composants par face, où et comment souder" height="48">
+  </a>
+</p>
+
+Le [manuel de soudure](docs/manuel_soudure.md) reprend tout pas à pas : liste des composants face par face, plans,
+technique pour chaque type de pièce, fils de liaison et contrôles avant la mise sous tension. Résumé ci-dessous.
 
 Les cartes arrivent avec les pièces délicates déjà soudées. Restent uniquement des pièces dont les pattes sont visibles
 et accessibles à la panne du fer. Sur les plans, **en orange : à souder soi-même**, en gris : déjà soudé par JLCPCB.

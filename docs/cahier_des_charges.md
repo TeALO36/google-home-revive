@@ -30,7 +30,7 @@ poussoir SW1 est au même endroit (x = 10,2 mm sur l'axe de la carte).
 | F4 | Musique / TTS / cast réseau | TAS5805M (DSP intégré), BTL 4 Ω, sous 16,5 V |
 | F5 | Mute qui coupe **physiquement** les micros | Bascule matérielle 74LVC1G74 : coupe l'alimentation des micros (P-MOS) et l'horloge PDM (buffer 3 états) |
 | F6 | Anneau lumineux | 12 LED RGB adressables WS2812B-MINI-V3J (3,5 mm, pattes apparentes, soudables au fer) sur la carte du dessus |
-| F7 | Tactile à travers le plastique : rotation = volume, tap = pause, double tap = piste suivante | MPR121, 10 secteurs en anneau (dents interpénétrées pour l'interpolation) ; tap = appui bref sans rotation, n'importe où sur l'anneau |
+| F7 | Tactile à travers le plastique : rotation = volume, tap = pause, double tap = piste suivante | MPR121, 10 secteurs en anneau (dents interpénétrées pour l'interpolation) ; tap = appui bref sans rotation, n'importe où sur l'anneau ; touche ronde au centre (Ø 10 mm, dans l'anneau de LED) pour pause / lecture |
 | F8 | Flash / debug | USB-C vertical (soudé en usine) sur l'USB natif de l'S3 : premier flash, journaux, puis OTA. Pastilles TP1-TP5 (EN, BOOT, TX, RX, GND) en secours |
 | F9 | Mêmes formes, dimensions, vis | contours, trous et connecteurs repris des photos (photogrammétrie, voir §8) |
 
@@ -90,8 +90,8 @@ poussoir SW1 est au même endroit (x = 10,2 mm sur l'axe de la carte).
   * Masse **maillée** (hachurée, ~40 % de cuivre) sur F, derrière les électrodes : elle les isole de l'intérieur du boîtier sans écraser la sensibilité tactile.
     Les pistes F qui passent derrière un secteur (I2C, PDM vers les micros) ajoutent une capacité fixe que le MPR121 absorbe à l'étalonnage. Le MPR121 filtre aussi le bruit de l'horloge PDM (3 MHz, bien au-dessus de sa fréquence de mesure).
 * **Micros** : MK1 = canal gauche (SELECT = GND), MK2 = canal droit (SELECT = VDD). Même horloge, même ligne de données (PDM stéréo).
-* **MPR121** : I2C **0x5B** (ADDR au +3,3 V), ELE0–ELE9 = secteurs, ELE10 et ELE11 libres.
-  * IRQ sur la pastille TP1. Le firmware peut se contenter du polling ; pour utiliser l'IRQ, ajouter un 11e fil vers TP8 (IO47) de la carte mère.
+* **MPR121** : I2C **0x5B** (ADDR au +3,3 V), ELE0–ELE9 = secteurs, ELE10 = touche centrale (disque Ø 10 mm sur B.Cu, au centre de l'anneau de LED), ELE11 libre.
+  * IRQ non câblée : le firmware interroge le MPR121 (polling). La pastille de test a été retirée pour laisser le centre libre à la touche centrale.
 * **Composants sur les deux faces** : les LED sont sur B (face vers le plastique, pour éclairer le diffuseur), le reste sur F.
   JLC assemble la face F seule (micros, MPR121, passifs) ; les 12 LED et le tampon 74AHCT1G125 se soudent au fer.
 * **Micros IM69D130** (Infineon) : SNR 69 dB(A), point de saturation 130 dB SPL. Ils sont au moins aussi bons que les **InvenSense INMP621** d'origine (SNR 65 dB(A), saturation 133 dB SPL) : +4 dB de rapport signal/bruit, ce qui compte le plus pour la détection du mot d'activation.
@@ -165,7 +165,7 @@ Fichiers dans `hardware/<carte>/fab/` : `*_gerbers.zip`, `*_bom.csv`, `*_cpl.csv
   * Carte du dessus : JLC soude les 2 micros **IM69D130** (LGA, port acoustique) et le **MPR121** (QFN 0,4 mm), avec leurs passifs.
   * Le nombre de soudures ne coûte presque rien (0,0016 $ l'unité) ; ce qui coûte, ce sont les frais fixes par carte et par face, les 3,07 $ par référence « étendue », la radiographie des pièces sans pattes et le passage au-dessus de 150 EUR.
 * JLC assemble au minimum **2 exemplaires** de chaque carte : le 2e jeu sert de réserve, ou de 2e appareil (seul un 2e kit LCSC s'ajoute).
-* **Soudé au fer** (pièces de `gh_*_hand_bom.csv`, achetées chez LCSC) : modules ESP32 (pattes crénelées sur le côté), boîtiers SOT-23 / TSSOP-8, bobines 4 × 4 mm, électrolytique, connecteur haut-parleur, 12 LED WS2812B-MINI-V3J (pattes en J visibles) et le tampon de niveau. Guide pièce par pièce : `README.md`.
+* **Soudé au fer** (pièces de `gh_*_hand_bom.csv`, achetées chez LCSC) : modules ESP32 (pattes crénelées sur le côté), boîtiers SOT-23 / TSSOP-8, bobines 4 × 4 mm, électrolytique, connecteur haut-parleur, 12 LED WS2812B-MINI-V3J (pattes en J visibles) et le tampon de niveau. Guide pièce par pièce : `docs/manuel_soudure.md`.
 * Le module **ESP32-S3-WROOM-1-N16R8** (C2913202) est parfois en rupture : toute variante S3-WROOM-1 avec PSRAM convient (N8R8, N16R2…).
 * **IM69D130** (C536262) : pris dans le stock JLC (131 pièces commandables le 14/11/2026). Vérifier le stock au moment de commander.
 * À la vérification des placements (étape « Component Placement » de JLC), contrôler l'orientation des micros et du MPR121.
@@ -183,8 +183,8 @@ Fichiers dans `hardware/<carte>/fab/` : `*_gerbers.zip`, `*_bom.csv`, `*_cpl.csv
 | AEC | AFE ESP-SR (AEC + BSS + NS + AGC) avec les 2 micros PDM et la référence I2S du TAS5805M. |
 | Média | lecteur réseau (cast / Snapcast / Sendspin / Music Assistant). Mélange avec le flux A2DP du module BT et ducking pendant la voix. |
 | Bluetooth | ESP32 en puits A2DP (bibliothèque ESP32-A2DP), sortie I2S maître vers l'S3. Appairage déclenché depuis HA (commande UART `PAIR`). L'S3 n'a que **2 périphériques I2S** (I2S0 = micros PDM, I2S1 = ampli + référence AEC) : pour relayer le flux BT, I2S0 bascule en esclave sur IO38-40 pendant la lecture Bluetooth (mot d'activation suspendu pendant ce temps), ou le flux passe par l'UART. |
-| Tactile | MPR121 : rotation horaire **vue de dessus** = volume +, antihoraire = volume − (pas = 1 secteur), simple tap (appui bref sans rotation, sur n'importe quel secteur) = pause/lecture, double tap = piste suivante. Seuils réglés **à travers le plastique**. |
-| LED | WS2812B (GRB) sur IO6, luminosité plafonnée (~50 %) : 12 LED blanches à 100 % ≈ 0,2 A sur le fil +5 V. |
+| Tactile | MPR121 : rotation horaire **vue de dessus** = volume +, antihoraire = volume − (pas = 1 secteur), simple tap (appui bref sans rotation, sur n'importe quel secteur) = pause/lecture, double tap = piste suivante ; la touche centrale (ELE10) fait de même (appui = pause/lecture, double appui = piste suivante). Seuils réglés **à travers le plastique**. |
+| LED | WS2812B RGB adressables (GRB) sur IO6, effets arc-en-ciel / comète / scintillement / feu d'artifice / bougie, luminosité plafonnée (~50 %) : 12 LED blanches à 100 % ≈ 0,2 A sur le fil +5 V. |
 | Mute | lire MUTE_STATE (IO7) pour l'afficher sur l'anneau ; MUTE_SET_N (IO15, actif bas) peut forcer le mute. |
 | Ampli | TAS5805M en I2C (0x2C attendu, à confirmer par un scan I2C) : séquence PDN, configuration BTL, plafond ~10 W. AMP_FAULT en entrée. |
 

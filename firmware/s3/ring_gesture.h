@@ -13,7 +13,7 @@
 
 #include <cstdint>
 
-namespace ring {
+namespace ring_gesture {
 
 enum class Event : uint8_t { None, VolumeUp, VolumeDown, Tap, DoubleTap };
 
@@ -98,4 +98,38 @@ class Decoder {
   uint32_t last_tap_ms_ = 0;
 };
 
-}  // namespace ring
+// The centre button and the ring can both report the same press (a finger on the centre also brushes the
+// ring tracks): a Tap or DoubleTap repeated within the window is dropped. Volume events always pass.
+class Dedup {
+ public:
+  explicit Dedup(uint32_t window_ms = 600) : window_ms_(window_ms) {}
+
+  bool accept(Event event, uint32_t now_ms) {
+    if (event != Event::Tap && event != Event::DoubleTap) {
+      return event != Event::None;
+    }
+    const bool repeat = event == last_ && now_ms - last_ms_ < window_ms_;
+    last_ = event;
+    last_ms_ = now_ms;
+    return !repeat;
+  }
+
+ private:
+  uint32_t window_ms_;
+  Event last_ = Event::None;
+  uint32_t last_ms_ = 0;
+};
+
+// Device-wide instances used by the ESPHome lambdas (ESPHome emits `includes:` after its globals, so these types
+// cannot live in a `globals:` entry).
+inline Decoder &decoder() {
+  static Decoder instance;
+  return instance;
+}
+
+inline Dedup &dedup() {
+  static Dedup instance;
+  return instance;
+}
+
+}  // namespace ring_gesture

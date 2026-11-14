@@ -9,7 +9,7 @@ from __future__ import annotations
 import math
 
 from .catalog import (ELECTRODE_TAP, LCSC_AHCT1G125, LCSC_IM69D130, LCSC_MPR121, LCSC_WS2812B_MINI_V3J, LED_MINI_V3J,
-                      MIC_IM69D130, QFN20_MPR121, SOT23_5, WIRE_PADS_10, cap, cap_22u, resistor, test_pad)
+                      MIC_IM69D130, QFN20_MPR121, SOT23_5, WIRE_PADS_10, cap, cap_22u, resistor)
 from .mainboard import LINK_LABELS, LINK_PINS
 from .mechanical import TOP
 from .model import Arc, BoardSpec, CopperZone, Keepout, NetClass, Part, Point, SilkText
@@ -17,6 +17,8 @@ from .model import Arc, BoardSpec, CopperZone, Keepout, NetClass, Part, Point, S
 SECTOR_START = -90.0  # first sector starts at 12 o'clock (component side view)
 FIRST_LED_ANGLE = 90.0  # D1 sits at 6 o'clock, next to the wire pads; chain runs clockwise (component side view)
 TAP_RADIUS = 15.6
+CENTRE_NET = "ELE10"  # centre tap button
+CENTRE_TAP: Point = (-2.9, -0.3)  # via to F.Cu, right next to MPR121 pin 18 (ELE10)
 LEDS_PER_CAP = 2  # one 100 nF per 2 LEDs (+ 22 uF bulk at the wire pads)
 WIRE_PADS_Y = 24.0
 MIC_PORTS: tuple[Point, Point] = ((TOP.mic_radius, 0.0), (-TOP.mic_radius, 0.0))
@@ -121,15 +123,23 @@ def electrode_net(index: int) -> str:
 
 
 def _electrode_zones() -> list[CopperZone]:
-    """Ring sectors only: on 2 layers the centre of B.Cu is needed for routing (tap = short touch on the ring)."""
-    return [CopperZone(electrode_net(k), "B.Cu", sector_polygon(k), clearance=0.3, min_width=0.25, priority=2,
-                       solid_pads=True, name=f"Touch sector {k}") for k in range(TOP.sectors)]
+    """Ring sectors (volume, tap) and the round centre button inside the LED ring (tap).
+
+    No track crosses the centre electrode on B.Cu (keepout), so it stays one solid disc.
+    """
+    zones = [CopperZone(electrode_net(k), "B.Cu", sector_polygon(k), clearance=0.3, min_width=0.25, priority=2,
+                        solid_pads=True, name=f"Touch sector {k}") for k in range(TOP.sectors)]
+    zones.append(CopperZone(CENTRE_NET, "B.Cu", _circle(TOP.centre_electrode_radius), clearance=0.3, min_width=0.25,
+                            priority=2, solid_pads=True, name="Touch centre"))
+    return zones
 
 
 def _keepouts() -> list[Keepout]:
     """B.Cu: no tracks under the electrodes (vias allowed, electrodes fill around them); no copper at mic ports."""
     areas = [Keepout(_wedge(k, 0.2), ("B.Cu",), f"Electrode {k} no-track", allow_vias=True, allow_fills=True)
              for k in range(TOP.sectors)]
+    areas.append(Keepout(_circle(TOP.centre_electrode_radius + 0.2), ("B.Cu",), "Centre electrode no-track",
+                         allow_vias=True, allow_fills=True))
     # electrodes (B.Cu) keep 1.6 mm away from the acoustic holes; the microphone itself sits on F.Cu
     areas += [Keepout(_circle(1.6, port, 24), ("B.Cu",), f"Mic port {i + 1}", allow_vias=True)
               for i, port in enumerate(MIC_PORTS)]
@@ -141,19 +151,21 @@ def _keepouts() -> list[Keepout]:
 def _touch() -> list[Part]:
     nets = {"1": "TOUCH_IRQ", "2": "I2C_SCL", "3": "I2C_SDA", "4": "+3V3", "5": "MPR_VREG", "6": "GND",
             "7": "MPR_REXT", "20": "+3V3"}
-    nets.update({str(8 + k): electrode_net(k) for k in range(TOP.sectors)})  # ELE0..ELE9; ELE10/11 unused
+    nets.update({str(8 + k): electrode_net(k) for k in range(TOP.sectors)})  # ELE0..ELE9 = ring sectors
+    nets["18"] = CENTRE_NET  # ELE10 = centre button; ELE11 unused
     parts = [
         Part("U1", "MPR121QR2", QFN20_MPR121, 0.0, 0.0, 0, nets=nets, lcsc=LCSC_MPR121,
-             note="Capacitive touch controller, I2C 0x5B (ADDR = VDD). ELE0-9 = ring sectors, ELE10/11 unused."),
+             note="Capacitive touch controller, I2C 0x5B (ADDR = VDD). ELE0-9 = ring sectors, ELE10 = centre button."),
         cap("C1", "100nF", -2.9, 1.9, 270, "+3V3"),  # pad 1 faces VDD (pin 20)
         cap("C2", "100nF", 1.6, 3.6, 0, "MPR_VREG"),
         resistor("R1", "75k", 3.4, 0.0, 90, "MPR_REXT", "GND"),
-        test_pad("TP1", "IRQ", -3.6, -2.0, "TOUCH_IRQ"),
     ]
     span = 360.0 / TOP.sectors
     for k in range(TOP.sectors):
         x, y = polar(TAP_RADIUS, SECTOR_START + (k + 0.5) * span)
         parts.append(Part(f"TE{k}", f"TAP_{k}", ELECTRODE_TAP, x, y, nets={"1": electrode_net(k)}, assemble=False))
+    parts.append(Part(f"TE{TOP.sectors}", "TAP_CENTRE", ELECTRODE_TAP, *CENTRE_TAP, nets={"1": CENTRE_NET},
+                      assemble=False))
     return parts
 
 

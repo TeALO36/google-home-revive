@@ -371,10 +371,12 @@ script:
     then:
       - lambda: |-
           const uint32_t now = millis();
-          const ring::Event event = pressed ? id(ring_decoder).press(sector, now)
-                                            : id(ring_decoder).release(sector, now);
-          if (event != ring::Event::None) {
-            id(ring_event)->execute(static_cast<int>(event));
+          const ring_gesture::Event event = pressed ? ring_gesture::decoder().press(sector, now)
+                                            : ring_gesture::decoder().release(sector, now);
+          if (event != ring_gesture::Event::None) {
+            if (ring_gesture::dedup().accept(event, millis())) {
+              id(ring_event)->execute(static_cast<int>(event));
+            }
           }
 
   - id: ring_event
@@ -385,19 +387,19 @@ script:
     then:
       - if:
           condition:
-            lambda: return code == static_cast<int>(ring::Event::VolumeUp);
+            lambda: return code == static_cast<int>(ring_gesture::Event::VolumeUp);
           then:
             - media_player.volume_up: player
             - script.execute: led_volume
       - if:
           condition:
-            lambda: return code == static_cast<int>(ring::Event::VolumeDown);
+            lambda: return code == static_cast<int>(ring_gesture::Event::VolumeDown);
           then:
             - media_player.volume_down: player
             - script.execute: led_volume
       - if:
           condition:
-            lambda: return code == static_cast<int>(ring::Event::Tap);
+            lambda: return code == static_cast<int>(ring_gesture::Event::Tap);
           then:
             - if:
                 condition:
@@ -412,25 +414,22 @@ script:
                         gesture: tap
       - if:
           condition:
-            lambda: return code == static_cast<int>(ring::Event::DoubleTap);
+            lambda: return code == static_cast<int>(ring_gesture::Event::DoubleTap);
           then:
             - homeassistant.event:
                 event: esphome.gh_revive_gesture
                 data:
                   gesture: double_tap
 
-globals:
-  - id: ring_decoder
-    type: ring::Decoder
-    restore_value: false
-
 interval:
   - interval: 50ms
     then:
       - lambda: |-
-          const ring::Event event = id(ring_decoder).poll(millis());
-          if (event != ring::Event::None) {
-            id(ring_event)->execute(static_cast<int>(event));
+          const ring_gesture::Event event = ring_gesture::decoder().poll(millis());
+          if (event != ring_gesture::Event::None) {
+            if (ring_gesture::dedup().accept(event, millis())) {
+              id(ring_event)->execute(static_cast<int>(event));
+            }
           }
   - interval: 60s  # setup mode: say how to reach the setup page
     then:
@@ -471,6 +470,23 @@ light:
           name: Reflexion
           transition_length: 400ms
           update_interval: 400ms
+      # RGB animations, selectable from Home Assistant (each of the 12 LEDs has its own 24-bit colour)
+      - addressable_rainbow:
+          name: Arc-en-ciel
+          speed: 10
+          width: 12
+      - addressable_color_wipe:
+          name: Balayage couleurs
+      - addressable_scan:
+          name: Comete
+          move_interval: 80ms
+          scan_width: 2
+      - addressable_twinkle:
+          name: Scintillement
+      - addressable_fireworks:
+          name: Feu d'artifice
+      - addressable_flicker:
+          name: Bougie
 
 # ------------------------------------------------------------------ sensors and controls
 
@@ -563,6 +579,29 @@ binary_sensor:
     internal: true
     on_press: [{script.execute: {id: ring_input, sector: 9, pressed: true}}]
     on_release: [{script.execute: {id: ring_input, sector: 9, pressed: false}}]
+  - platform: mpr121
+    id: centre_button  # round electrode inside the LED ring
+    channel: 10
+    internal: true
+    on_multi_click:
+      - timing:
+          - ON for at most 0.5s
+          - OFF for at most 0.35s
+          - ON for at most 0.5s
+          - OFF for at least 0.2s
+        then:
+          - lambda: |-
+              if (ring_gesture::dedup().accept(ring_gesture::Event::DoubleTap, millis())) {
+                id(ring_event)->execute(static_cast<int>(ring_gesture::Event::DoubleTap));
+              }
+      - timing:
+          - ON for at most 0.5s
+          - OFF for at least 0.35s
+        then:
+          - lambda: |-
+              if (ring_gesture::dedup().accept(ring_gesture::Event::Tap, millis())) {
+                id(ring_event)->execute(static_cast<int>(ring_gesture::Event::Tap));
+              }
 
 switch:
   - platform: gpio

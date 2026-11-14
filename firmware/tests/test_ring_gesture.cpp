@@ -5,8 +5,8 @@
 
 #include "ring_gesture.h"
 
-using ring::Decoder;
-using ring::Event;
+using ring_gesture::Decoder;
+using ring_gesture::Event;
 
 namespace {
 
@@ -66,6 +66,17 @@ void test_long_press_and_jumps() {
   expect(d.press(-1, 4200) == Event::None, "invalid sector ignored");
 }
 
+void test_dedup() {
+  ring_gesture::Dedup dedup(600);
+  expect(dedup.accept(Event::Tap, 1000), "first tap passes");
+  expect(!dedup.accept(Event::Tap, 1100), "same tap from the other sensor is dropped");
+  expect(dedup.accept(Event::Tap, 2000), "a later tap passes");
+  expect(dedup.accept(Event::DoubleTap, 2100), "a different gesture passes");
+  expect(dedup.accept(Event::VolumeUp, 2150), "volume steps always pass");
+  expect(dedup.accept(Event::VolumeUp, 2160), "repeated volume steps always pass");
+  expect(!dedup.accept(Event::None, 2200), "None never passes");
+}
+
 }  // namespace
 
 int main() {
@@ -74,6 +85,7 @@ int main() {
   test_single_tap();
   test_double_tap();
   test_long_press_and_jumps();
+  test_dedup();
   if (failures != 0) {
     std::fprintf(stderr, "%d check(s) failed\n", failures);
     return EXIT_FAILURE;
