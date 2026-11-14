@@ -19,7 +19,8 @@ class Part:
     side: str = "F"  # "F" or "B"
     nets: dict[str, str] = field(default_factory=dict)
     lcsc: str = ""
-    assemble: bool = True  # False -> not populated by JLCPCB (hand soldered / reused part)
+    assemble: bool = True  # False -> not a bought component (wire pads, electrode taps, reused original part)
+    hand: bool = False  # True -> bought at LCSC and soldered by the user, left out of the JLCPCB BOM / CPL
     note: str = ""
     unnamed_pads_net: str = ""  # net for pads without a number (mic seal ring, ...)
 

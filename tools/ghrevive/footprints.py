@@ -124,3 +124,4 @@ def write_project_footprints(lib_dir: Path) -> list[Path]:
         path.write_text(_footprint_sexpr(name, description, pads, side, attr), encoding="utf-8")
         written.append(path)
     return written
+

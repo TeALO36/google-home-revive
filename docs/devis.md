@@ -11,7 +11,7 @@
 | MPR121QR2 | C91322 | 1 | 1 | 2.73 |
 | 22uF/25V | C45783 | 10 | 20 | 2.19 |
 | TAS5805MPWPR | C478472 | 1 | 1 | 2.18 |
-| WS2812B-2020 | C52917434 | 12 | 15 | 1.30 |
+| WS2812B-MINI-V3J | C22371519 | 12 | 15 | 1.89 |
 | TPS54302DDCR | C311983 | 1 | 5 | 1.26 |
 | 10uF/50V | C13585 | 1 | 10 | 1.22 |
 | SPEAKER | C265329 | 1 | 5 | 1.17 |
@@ -42,7 +42,7 @@
 | 10k | C25804 | 7 | 100 | 0.20 |
 | 1k | C21190 | 2 | 100 | 0.17 |
 | 5.1k | C23186 | 2 | 100 | 0.16 |
-| **Total composants** | | | | **34.98** (30.08 EUR) |
+| **Total composants** | | | | **35.57** (30.59 EUR) |
 
 ## Total
 
@@ -50,13 +50,13 @@
 |---|---:|---:|
 | PCB nus : Carte mere 2 couches 107.6 x 49 mm, 5 pcs | 6.60 | 5.68 |
 | PCB nus : Carte du dessus 2 couches D74.8 mm, 5 pcs | 4.00 | 3.44 |
-| Composants | 34.98 | 30.08 |
+| Composants | 35.57 | 30.59 |
 | Livraison JLC Global Standard Direct (France) | 6.73 | 5.79 |
 | Supplement colis LCSC fusionne (estimation) | 5.00 | 4.30 |
-| **Total HT** | | **49.28** |
-| TVA 20 % (percue a la commande, IOSS) | | 9.86 |
+| **Total HT** | | **49.79** |
+| TVA 20 % (percue a la commande, IOSS) | | 9.96 |
 | Taxe petits colis France | | 2.00 |
-| **Sous-total TTC commande JLC + LCSC** | | **61.14** |
+| **Sous-total TTC commande JLC + LCSC** | | **61.75** |
 | IM69D130 (Mouser / DigiKey / Farnell, a l'unite) x2, TTC port compris (estimation, --external-eur) | | 10.00 |
-| **Total TTC** | | **71.14** |
-| Soit par jeu | | 71.14 |
+| **Total TTC** | | **71.75** |
+| Soit par jeu | | 71.75 |

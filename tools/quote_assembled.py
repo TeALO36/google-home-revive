@@ -14,7 +14,7 @@ import math
 import sqlite3
 from dataclasses import dataclass
 
-from quote import DB, PCB_FEES, REPO, VAT, read_needs
+from quote import BOMS, DB, PCB_FEES, REPO, VAT, read_needs
 
 OUT = REPO / "docs" / "devis_assemble.md"
 SMT_JOINT, XRAY_UNIT, EXTENDED_FEEDER_ECO, FEEDER_STD = 0.0016, 1.64, 3.07, 1.53
@@ -29,15 +29,16 @@ CARRIER_FEE_EUR = 12.0  # import clearance fee charged by the carrier above 150 
 @dataclass(frozen=True)
 class Assembly:
     name: str
-    bom: str
+    boms: tuple[str, ...]
     economic: bool
     joints: int  # solder joints per board
     xray_parts: int  # leadless parts per board (modules, LGA microphones, QFN)
 
 
+# every part of the board soldered by JLC: factory BOM + hand-soldered list
 ASSEMBLIES = (
-    Assembly("Carte mere - Economic PCBA, 1 face", "hardware/mainboard/fab/gh_mainboard_bom.csv", True, 420, 3),
-    Assembly("Carte du dessus - Standard PCBA, 2 faces", "hardware/topboard/fab/gh_topboard_bom.csv", False, 140, 3),
+    Assembly("Carte mere - Economic PCBA, 1 face", BOMS[0:2], True, 420, 3),
+    Assembly("Carte du dessus - Standard PCBA, 2 faces", BOMS[2:4], False, 140, 3),
 )
 
 
@@ -53,9 +54,9 @@ def _jlc_part(con: sqlite3.Connection, lcsc: str, qty: int) -> tuple[float, bool
     return unit, bool(row[1] or row[2])
 
 
-def _parts(con: sqlite3.Connection, bom: str, sets: int) -> tuple[float, int, int]:
+def _parts(con: sqlite3.Connection, boms: tuple[str, ...], sets: int) -> tuple[float, int, int]:
     """(parts cost, extended part types, part types); JLC adds attrition on cheap passives."""
-    needs, _ = read_needs(sets, (bom,))
+    needs, _ = read_needs(sets, boms)
     cost, extended = 0.0, 0
     for lcsc, needed in needs.items():
         qty = max(math.ceil(needed * 1.1), needed + 2)
@@ -66,7 +67,7 @@ def _parts(con: sqlite3.Connection, bom: str, sets: int) -> tuple[float, int, in
 
 
 def board_cost(con: sqlite3.Connection, job: Assembly, sets: int) -> dict[str, float]:
-    parts, extended, types = _parts(con, job.bom, sets)
+    parts, extended, types = _parts(con, job.boms, sets)
     fees = {"Mise en route": 8.18 if job.economic else 51.12, "Pochoir": 1.53 if job.economic else 16.42,
             "Soudures": job.joints * sets * SMT_JOINT, "Radiographie (pieces sans pattes)": job.xray_parts * sets * XRAY_UNIT}
     if job.economic:

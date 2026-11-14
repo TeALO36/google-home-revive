@@ -21,7 +21,9 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 DB = Path.home() / ".kicad-mcp/data/jlcparts_cache/cdfer.sqlite3"
 OUT = REPO / "docs" / "devis.md"
-BOMS = ("hardware/mainboard/fab/gh_mainboard_bom.csv", "hardware/topboard/fab/gh_topboard_bom.csv")
+# JLC BOM (factory-soldered parts) + hand-soldered list of each board; a missing file means "no such part"
+BOMS = tuple(f"hardware/{board}/fab/gh_{board}_{kind}.csv"
+             for board in ("mainboard", "topboard") for kind in ("bom", "hand_bom"))
 SNAPSHOT = REPO / "tools" / "data" / "lcsc_prices.json"  # LCSC MOQ + price breaks read on lcsc.com, 2026-11-14
 # LCSC sells the IM69D130 only by 10 (third-party stock, ~52 USD): bought apart, at the unit, from a distributor
 EXTERNAL_PARTS = {"C536262": "IM69D130 (Mouser / DigiKey / Farnell, a l'unite)"}
@@ -84,6 +86,8 @@ def read_needs(sets: int, boms: tuple[str, ...] = BOMS) -> tuple[Counter[str], d
     needs: Counter[str] = Counter()
     comments: dict[str, str] = {}
     for bom in boms:
+        if not (REPO / bom).exists():
+            continue
         with (REPO / bom).open(encoding="utf-8") as handle:
             for row in csv.DictReader(handle):
                 needs[row["LCSC Part #"]] += len(row["Designator"].split(",")) * sets
@@ -91,13 +95,15 @@ def read_needs(sets: int, boms: tuple[str, ...] = BOMS) -> tuple[Counter[str], d
     return needs, comments
 
 
-def price_lines(sets: int) -> list[Line]:
+def price_lines(sets: int, boms: tuple[str, ...] = BOMS,
+                skip: frozenset[str] = frozenset(EXTERNAL_PARTS)) -> list[Line]:
+    """LCSC order lines (minimum quantities applied) for the given BOMs, parts in `skip` excluded."""
     con = sqlite3.connect(f"file:{DB}?mode=ro", uri=True) if DB.exists() else None
     offers = _snapshot_offers()
-    needs, comments = read_needs(sets)
+    needs, comments = read_needs(sets, boms)
     lines = []
     for lcsc, needed in needs.items():
-        if lcsc in EXTERNAL_PARTS:
+        if lcsc in skip:
             continue
         offer = offers.get(lcsc) or _database_offer(con, lcsc)
         bought = offer.buy(needed)

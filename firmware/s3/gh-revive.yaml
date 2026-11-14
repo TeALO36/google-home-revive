@@ -1,9 +1,13 @@
 # GH-Revive - ESP32-S3 main firmware (ESPHome).
 #
 #   esphome config  firmware/s3/gh-revive.yaml     # validate
-#   esphome run     firmware/s3/gh-revive.yaml     # build + flash over USB-C, then OTA
+#   esphome run     firmware/s3/gh-revive.yaml     # first flash through the USB-C (BOOT pad TP2 on GND while plugging), then OTA
 #
 # Pin map: docs/cahier_des_charges.md, section 10. Secrets: copy secrets.example.yaml to secrets.yaml.
+#
+# Wi-Fi: the network in secrets.yaml is tried first. If it is missing or unreachable, the access point
+# "GH-Revive Setup" opens after 30 s and the speaker says so; joining it opens the setup page (admin password first,
+# then network + key, tested live). Once connected, the speaker reads the IP address aloud.
 
 substitutions:
   name: gh-revive
@@ -18,6 +22,7 @@ esphome:
   min_version: 2025.5.0
   includes:
     - ring_gesture.h
+    - ip_speech.h
   on_boot:
     - priority: 600
       then:
@@ -43,7 +48,7 @@ psram:
   speed: 80MHz
 
 logger:
-  hardware_uart: USB_SERIAL_JTAG
+  hardware_uart: USB_SERIAL_JTAG  # USB-C of the main board
 
 api:
   encryption:
@@ -60,11 +65,29 @@ ota:
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
+  min_auth_mode: WPA  # accepts WPA, WPA2 and WPA3 networks; WEP is not supported by the ESP32 Wi-Fi stack
   ap:
     ssid: "GH-Revive Setup"
     password: !secret ap_password
+    ap_timeout: 30s
+  on_connect:
+    - if:
+        condition:
+          lambda: return id(setup_portal).take_announce_request();
+        then:
+          - script.execute: announce_ip
 
-captive_portal:
+captive_portal:  # DNS redirection on the access point; the pages themselves are served by gh_setup
+
+external_components:
+  - source:
+      type: local
+      path: components
+    components: [gh_setup]
+
+gh_setup:
+  id: setup_portal
+  test_timeout: 25s
 
 # ------------------------------------------------------------------ buses
 
@@ -153,6 +176,20 @@ media_player:
     volume_increment: 0.05
     volume_min: 0.0
     volume_max: 0.9
+    files:  # French voice prompts, sounds/README.md
+      - {id: snd_digit_0, file: sounds/digit_0.flac}
+      - {id: snd_digit_1, file: sounds/digit_1.flac}
+      - {id: snd_digit_2, file: sounds/digit_2.flac}
+      - {id: snd_digit_3, file: sounds/digit_3.flac}
+      - {id: snd_digit_4, file: sounds/digit_4.flac}
+      - {id: snd_digit_5, file: sounds/digit_5.flac}
+      - {id: snd_digit_6, file: sounds/digit_6.flac}
+      - {id: snd_digit_7, file: sounds/digit_7.flac}
+      - {id: snd_digit_8, file: sounds/digit_8.flac}
+      - {id: snd_digit_9, file: sounds/digit_9.flac}
+      - {id: snd_point, file: sounds/point.flac}
+      - {id: snd_connected, file: sounds/connected.flac}
+      - {id: snd_setup, file: sounds/setup.flac}
     announcement_pipeline:
       speaker: announcement_resampler
       format: FLAC
@@ -262,6 +299,26 @@ script:
       - lambda: |-
           if (!id(amp_i2c).write_byte(0x03, 0x03) || !id(amp_i2c).write_byte(0x78, 0x80)) {
             ESP_LOGE("amp", "TAS5805M play / fault clear failed");
+          }
+
+  # ---------------------------------------------------------------- voice prompts
+  - id: announce_ip
+    mode: single
+    then:
+      - delay: 2s  # amplifier started, DHCP settled
+      - lambda: |-
+          const std::string ip = id(setup_portal).station_ip();
+          if (ip.empty()) {
+            ESP_LOGW("announce", "No IP address to announce");
+            return;
+          }
+          ESP_LOGI("announce", "Speaking IP address %s", ip.c_str());
+          const ip_speech::Clips clips = {{id(snd_digit_0), id(snd_digit_1), id(snd_digit_2), id(snd_digit_3),
+                                           id(snd_digit_4), id(snd_digit_5), id(snd_digit_6), id(snd_digit_7),
+                                           id(snd_digit_8), id(snd_digit_9)}, id(snd_point)};
+          id(player).play_file(id(snd_connected), true, true);
+          for (const audio::AudioFile *clip : ip_speech::sequence(ip, clips)) {
+            id(player).play_file(clip, true, true);
           }
 
   # ---------------------------------------------------------------- LED ring
@@ -375,6 +432,16 @@ interval:
           if (event != ring::Event::None) {
             id(ring_event)->execute(static_cast<int>(event));
           }
+  - interval: 60s  # setup mode: say how to reach the setup page
+    then:
+      - if:
+          condition:
+            lambda: return id(setup_portal).ap_active();
+          then:
+            - media_player.speaker.play_on_device_media_file:
+                id: player
+                media_file: snd_setup
+                announcement: true
 
 mpr121:
   id: touch
@@ -527,6 +594,10 @@ button:
       - output.turn_off: bt_enable
       - delay: 50ms
       - output.turn_on: bt_enable
+  - platform: template
+    name: Annoncer l'adresse IP
+    on_press:
+      - script.execute: announce_ip
   - platform: restart
     name: Redemarrer
     entity_category: config

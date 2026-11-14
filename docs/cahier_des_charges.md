@@ -29,9 +29,9 @@ poussoir SW1 est au même endroit (x = 10,2 mm sur l'axe de la carte).
 | F3 | Mot d'activation « Jarvis » même musique forte | 2 micros PDM + **référence d'écho matérielle** (sortie SDOUT du TAS5805M renvoyée à l'S3) pour l'AEC |
 | F4 | Musique / TTS / cast réseau | TAS5805M (DSP intégré), BTL 4 Ω, sous 16,5 V |
 | F5 | Mute qui coupe **physiquement** les micros | Bascule matérielle 74LVC1G74 : coupe l'alimentation des micros (P-MOS) et l'horloge PDM (buffer 3 états) |
-| F6 | Anneau lumineux | 12 LED RGB adressables WS2812B-2020 sur la carte du dessus |
+| F6 | Anneau lumineux | 12 LED RGB adressables WS2812B-MINI-V3J (3,5 mm, pattes apparentes, soudables au fer) sur la carte du dessus |
 | F7 | Tactile à travers le plastique : rotation = volume, tap = pause, double tap = piste suivante | MPR121, 10 secteurs en anneau (dents interpénétrées pour l'interpolation) ; tap = appui bref sans rotation, n'importe où sur l'anneau |
-| F8 | Flash / debug sans ouvrir | USB-C (USB natif de l'S3, protection ESD USBLC6), alimentation possible par l'USB pour flasher |
+| F8 | Flash / debug | USB-C vertical (soudé en usine) sur l'USB natif de l'S3 : premier flash, journaux, puis OTA. Pastilles TP1-TP5 (EN, BOOT, TX, RX, GND) en secours |
 | F9 | Mêmes formes, dimensions, vis | contours, trous et connecteurs repris des photos (photogrammétrie, voir §8) |
 
 ## 3. Architecture
@@ -82,8 +82,8 @@ poussoir SW1 est au même endroit (x = 10,2 mm sur l'axe de la carte).
 
 * **2 couches** (F composants + signaux + masse maillée, B électrodes + LED), Ø 74,8 mm, 3 encoches de positionnement (2 en haut à ±8,17 mm, 1 en bas à 7,4 mm).
 * **Face B.Cu (vers le plastique)**
-  * Électrodes tactiles : anneau de 10 secteurs (r 13,3 → 35,6 mm) à dents interpénétrées. Pas d'électrode centrale : en 2 couches, le centre de cette face sert au routage.
-  * Les **12 LED WS2812B-2020** sont à l'intérieur de l'anneau (r = 10,48 mm, comme l'anneau d'origine). Découplage : 6 × 100 nF (1 pour 2 LED) + 22 µF à l'arrivée des fils.
+  * Électrodes tactiles : anneau de 10 secteurs (r 14,8 → 35,6 mm) à dents interpénétrées. Pas d'électrode centrale : en 2 couches, le centre de cette face sert au routage.
+  * Les **12 LED WS2812B-MINI-V3J** sont à l'intérieur de l'anneau (centre à r = 10,48 mm, comme l'anneau d'origine), pattes orientées vers le centre et vers l'extérieur. Découplage : 6 × 100 nF (1 pour 2 LED) + 22 µF à l'arrivée des fils.
 * **Face F.Cu (vers l'intérieur)**
   * MPR121 au centre, les 2 micros IM69D130 à port inférieur (perçage Ø 0,6 mm sous chacun, en face des trous d'origine à ±34,46 mm).
   * Tampon 74AHCT1G125 (données LED 3,3 → 5 V), découplages, pastilles des 10 fils.
@@ -93,7 +93,7 @@ poussoir SW1 est au même endroit (x = 10,2 mm sur l'axe de la carte).
 * **MPR121** : I2C **0x5B** (ADDR au +3,3 V), ELE0–ELE9 = secteurs, ELE10 et ELE11 libres.
   * IRQ sur la pastille TP1. Le firmware peut se contenter du polling ; pour utiliser l'IRQ, ajouter un 11e fil vers TP8 (IO47) de la carte mère.
 * **Composants sur les deux faces** : les LED sont sur B (face vers le plastique, pour éclairer le diffuseur), le reste sur F.
-  En assemblage maison, souder d'abord la face F (pâte + air chaud ou plaque chauffante), puis les LED à la main.
+  JLC assemble la face F seule (micros, MPR121, passifs) ; les 12 LED et le tampon 74AHCT1G125 se soudent au fer.
 * **Micros IM69D130** (Infineon) : SNR 69 dB(A), point de saturation 130 dB SPL. Ils sont au moins aussi bons que les **InvenSense INMP621** d'origine (SNR 65 dB(A), saturation 133 dB SPL) : +4 dB de rapport signal/bruit, ce qui compte le plus pour la détection du mot d'activation.
 
 ### Repérage (vue côté composants F, y vers le bas)
@@ -153,26 +153,32 @@ Fichiers dans `hardware/<carte>/fab/` : `*_gerbers.zip`, `*_bom.csv`, `*_cpl.csv
 |---|---|---|
 | Couches | 2 | 2 |
 | Épaisseur | 1,6 mm | 1,6 mm |
-| Finition | HASL sans plomb (exigé pour l'assemblage) | idem |
+| Finition | HASL sans plomb (exigé pour l'assemblage) | HASL sans plomb |
 | Vias | Tented (couverts) : l'option par défaut « epoxy filled » ajoute ~16 $ | idem |
 | Quantité PCB | 5 (minimum JLC) | 5 |
-| Assemblage (PCBA) | **Economic, 1 face** (tout sur F) | **Standard, 2 faces** (LED sur B) |
-| Quantité assemblée | 2 (minimum JLC) | 2 |
+| Assemblage (PCBA) | **Economic, 1 face** (TAS5805M, USB-C, passifs) | **Economic, face F seule** (micros, MPR121, passifs) |
+| Quantité assemblée | 2 (minimum JLC) | 2 (minimum JLC) |
 | Fichiers à téléverser | Gerber + `gh_mainboard_bom.csv` + `gh_mainboard_cpl.csv` | Gerber + `gh_topboard_bom.csv` + `gh_topboard_cpl.csv` |
 
-* **Commande retenue : cartes assemblées par JLCPCB.** Les micros LGA, le MPR121 (QFN 0,4 mm) et le pad thermique du TAS5805M ne se soudent pas sans air chaud : JLC pose et soude tout, il ne reste que les 10 fils de liaison et le haut-parleur à brancher.
-* JLC assemble au minimum **2 exemplaires** d'une carte : la commande donne 2 appareils complets (et 3 PCB nus de réserve de chaque).
-* Le module **ESP32-S3-WROOM-1-N16R8** (C2913202) est parfois en rupture : toute variante S3-WROOM-1 avec PSRAM convient (N8R8, N16R2…). Remplacer le code LCSC dans `tools/ghrevive/catalog.py` puis régénérer.
+* **Commande retenue : les pièces sensibles sont soudées en usine, le reste au fer.**
+  * Carte mère : JLC soude le **TAS5805M** (plaque thermique sous le boîtier), l'**USB-C** (broches sous le boîtier) et tous les passifs 0603 / 0805 / SMA, le poussoir mute et le MOSFET.
+  * Carte du dessus : JLC soude les 2 micros **IM69D130** (LGA, port acoustique) et le **MPR121** (QFN 0,4 mm), avec leurs passifs.
+  * Le nombre de soudures ne coûte presque rien (0,0016 $ l'unité) ; ce qui coûte, ce sont les frais fixes par carte et par face, les 3,07 $ par référence « étendue », la radiographie des pièces sans pattes et le passage au-dessus de 150 EUR.
+* JLC assemble au minimum **2 exemplaires** de chaque carte : le 2e jeu sert de réserve, ou de 2e appareil (seul un 2e kit LCSC s'ajoute).
+* **Soudé au fer** (pièces de `gh_*_hand_bom.csv`, achetées chez LCSC) : modules ESP32 (pattes crénelées sur le côté), boîtiers SOT-23 / TSSOP-8, bobines 4 × 4 mm, électrolytique, connecteur haut-parleur, 12 LED WS2812B-MINI-V3J (pattes en J visibles) et le tampon de niveau. Guide pièce par pièce : `README.md`.
+* Le module **ESP32-S3-WROOM-1-N16R8** (C2913202) est parfois en rupture : toute variante S3-WROOM-1 avec PSRAM convient (N8R8, N16R2…).
 * **IM69D130** (C536262) : pris dans le stock JLC (131 pièces commandables le 14/11/2026). Vérifier le stock au moment de commander.
-* À la vérification des placements (étape « Component Placement » de JLC), contrôler surtout l'orientation des micros, des LED et du TAS5805M.
-* Alternative en kit (soudure maison, 1 jeu) : `tools/quote.py`, ~71 € TTC, mais outillage air chaud indispensable.
+* À la vérification des placements (étape « Component Placement » de JLC), contrôler l'orientation des micros et du MPR121.
+* À la vérification des placements (étape « Component Placement » de JLC), contrôler aussi le TAS5805M et l'USB-C.
+* Outillage : fer à panne fine, flux, tresse à dessouder, loupe. Pas d'air chaud nécessaire.
+* Autres scénarios : tout assemblé par JLC (`tools/quote_assembled.py`, ~129 EUR par appareil) ou kit complet soudé à l'air chaud (`tools/quote.py`, ~71 EUR).
 
 ## 10. Exigences logicielles (base fournie dans `firmware/`)
 
 | Fonction | Exigence |
 |---|---|
-| Wi-Fi | SSID / clé gravés au flash (secrets). Si la connexion échoue : AP de secours + **portail captif** listant les réseaux scannés, avec un test de connexion en direct en mode AP+STA sans couper l'AP, et un bouton **WPS** (esp_wps). |
-| Mise à jour | OTA ; flash initial et secours par USB-C (USB-CDC/JTAG natif de l'S3). Le module BT se flashe **à travers l'S3** (UART + EN/BOOT pilotés par IO2 / IO1). |
+| Wi-Fi | SSID / clé gravés au flash (secrets), facultatif. Sinon, ou si le réseau est injoignable 30 s : point d'accès **GH-Revive Setup** + portail captif (composant `gh_setup`). Page : 1) mot de passe administrateur (créé au premier usage, demandé ensuite), 2) réseau scanné ou saisi + clé, testé en direct ; « clé incorrecte », « réseau introuvable » ou « sécurité non prise en charge » s'affichent et l'on réessaie. WPA / WPA2 / WPA3 acceptés ; le WEP n'est pas géré par la pile Wi-Fi de l'ESP32. Une fois connecté, le haut-parleur **lit l'adresse IP** (et à la demande, bouton HA). |
+| Mise à jour | OTA ; flash initial par l'USB-C (TP2 BOOT à la masse en branchant le câble), secours par adaptateur USB-série sur TP1-TP5. Le module BT se flashe **à travers l'S3** (pont USB ↔ UART1, BOOT/EN pilotés par IO1 / IO2 selon DTR / RTS). |
 | Voix | ESPHome `voice_assistant` / `micro_wake_word`. Mot « Jarvis » : un modèle « hey jarvis » existe ; « Jarvis » seul demande d'entraîner un modèle. Pipeline HA → agent conversationnel (OpenClaw), TTS en streaming. |
 | AEC | AFE ESP-SR (AEC + BSS + NS + AGC) avec les 2 micros PDM et la référence I2S du TAS5805M. |
 | Média | lecteur réseau (cast / Snapcast / Sendspin / Music Assistant). Mélange avec le flux A2DP du module BT et ducking pendant la voix. |
@@ -204,28 +210,25 @@ Fichiers dans `hardware/<carte>/fab/` : `*_gerbers.zip`, `*_bom.csv`, `*_cpl.csv
 "C:/Program Files/KiCad/10.0/bin/python.exe" tools/build.py all --stage place
 "C:/Program Files/KiCad/10.0/bin/python.exe" tools/quote_assembled.py      # devis assemblé -> docs/devis_assemble.md
 "C:/Program Files/KiCad/10.0/bin/python.exe" tools/quote.py                # devis kit -> docs/devis.md
+"C:/Program Files/KiCad/10.0/bin/python.exe" tools/quote_partial.py        # devis retenu -> docs/devis_partiel.md
 ```
 Routage automatique : FreeRouting (`%LOCALAPPDATA%/freerouting/freerouting.exe`). DRC KiCad : `hardware/*/gh_*_drc.json`.
 
-## 12. Devis TTC - cartes assemblées par JLCPCB (détail : `docs/devis_assemble.md`)
+## 12. Devis TTC - pièces sensibles soudées en usine (détail : `docs/devis_partiel.md`)
 
-Commande : 5 PCB nus 2 couches de chaque carte, dont **2 de chaque assemblées** par JLC (minimum), composants du stock JLC.
-Grille tarifaire PCBA JLCPCB du 22/10/2026, prix des pièces et des PCB relevés le 14/11/2026, 1 $ = 0,86 EUR.
+Taux 0,86 EUR / USD, site web JLCPCB, TVA 20 % et taxe petits colis incluses, commande unique sous 150 EUR.
 
-| Poste | USD | EUR |
-|---|---:|---:|
-| Carte mère : Economic PCBA (mise en route, pochoir, radiographie, 15 pièces étendues) + composants | 99,85 | 85,87 |
-| Carte du dessus : Standard PCBA 2 faces (mise en route, pochoir double) + composants | 112,14 | 96,44 |
-| PCB nus (6,60 $ + 4,00 $) | 10,60 | 9,12 |
-| Coupon SMT mensuel JLC | -9,00 | -7,74 |
-| Livraison DHL Express (commande > 150 $) | 24,00 | 20,64 |
-| TVA 20 % payée à la livraison | 47,52 | 40,87 |
-| Frais de dédouanement transporteur | 13,95 | 12,00 |
-| **Total TTC (2 appareils)** | **~299 $** | **~257 EUR** |
-| **Soit par appareil** | **~150 $** | **~129 EUR** |
+| Poste | EUR |
+|---|---:|
+| Assemblage JLC carte mère (x2) : TAS5805M, USB-C, passifs | 22,99 |
+| Assemblage JLC carte du dessus (x2) : micros, MPR121, passifs | 38,55 |
+| Coupon SMT mensuel JLC | -7,74 |
+| Pièces LCSC à souder soi-même (1 jeu) | 17,87 |
+| PCB nus (5 de chaque) | 9,12 |
+| Livraison JLC + colis LCSC fusionné | 10,09 |
+| Total HT | 90,88 |
+| TVA 20 % + taxe petits colis | 20,18 |
+| **Total TTC, 1 appareil (+ 1 jeu de cartes en réserve)** | **111,06** |
+| **Total TTC, 2 appareils (2e kit LCSC ajouté)** | **122,35**, soit **61,17 par appareil** |
 
-* Le coût est surtout fixe (mise en route, pochoirs, chargement des bobines) : 2 jeux coûtent à peine plus qu'un seul.
-* La carte du dessus est chère à cause des LED sur la face B (assemblage double face obligatoire, ~67 $ de frais fixes).
-* Au-dessus de 150 EUR la TVA n'est plus perçue à la commande : elle est payée au transporteur avec ses frais.
-* Alternative kit, soudure maison (1 jeu, `docs/devis.md`) : ~71 EUR TTC, mais station à air chaud indispensable pour les micros LGA.
-* `tools/quote_assembled.py --sets N` recalcule le total pour N jeux.
+Avec l'application de bureau JLCPCB (PCB 4 $ moins cher) : 106,93 EUR pour 1 appareil, 59,11 EUR par appareil pour 2.

@@ -143,7 +143,7 @@ def add_part(board: pcbnew.BOARD, spec: BoardSpec, part: Part, nets: NetTable) -
     if part.ref in spec.strip_footprint_keepouts:
         _strip_module_clearance(footprint)
     _assign_pad_nets(footprint, part, nets)
-    _set_fields(footprint, part)
+    _set_fields(footprint, part, part.hand)
     return footprint
 
 
@@ -188,16 +188,20 @@ def _assign_pad_nets(footprint: pcbnew.FOOTPRINT, part: Part, nets: NetTable) ->
         raise ValueError(f"{part.ref}: pads {sorted(missing)} not found in {part.footprint}")
 
 
-def _set_fields(footprint: pcbnew.FOOTPRINT, part: Part) -> None:
+ASSEMBLY_FIELD = "Assembly"  # "JLCPCB" or "hand" (bought at LCSC, soldered by the user)
+
+
+def _set_fields(footprint: pcbnew.FOOTPRINT, part: Part, hand: bool) -> None:
     if part.lcsc:
         footprint.SetField("LCSC", part.lcsc)
+        footprint.SetField(ASSEMBLY_FIELD, "hand" if hand else "JLCPCB")
     if part.note:
         footprint.SetField("Note", part.note)
     if not part.assemble:
         footprint.SetDNP(True)
         footprint.SetExcludedFromPosFiles(True)
     for field in footprint.GetFields():
-        if field.GetName() in ("LCSC", "Note"):
+        if field.GetName() in ("LCSC", "Note", ASSEMBLY_FIELD):
             field.SetVisible(False)
 
 

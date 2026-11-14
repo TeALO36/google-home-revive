@@ -74,7 +74,7 @@ class TopBoardDims:
     top_notch_x: tuple[float, float] = (-8.17, 8.17)  # two slots on the upper edge
     bottom_notch_x: float = 7.4  # one slot on the lower edge (component side view)
     bottom_notch_depth: float = 2.3
-    electrode_inner: float = 13.3
+    electrode_inner: float = 14.8  # clears the outer J-leads of the 3.5 mm LEDs (r = 10.48 + 3.6)
     electrode_outer: float = 35.6
     sectors: int = 10
     sector_gap: float = 0.8

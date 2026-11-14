@@ -5,6 +5,8 @@ y across the board. The front (F.Cu) faces the rear shell: mute switch, USB-C an
 """
 from __future__ import annotations
 
+from dataclasses import replace
+
 from .catalog import (CAP_220UF_ELEC, CP_ELEC, D_SMA, D_SOD123, SOT23, SOT23_5, SOT23_6, TAS5805_FP, TSSOP8, cap,
                       cap_10u_50v, cap_22u, inductor, resistor, test_pad)
 from .mechanical import MAIN
@@ -248,10 +250,17 @@ def _keepouts() -> list[Keepout]:
     ]
 
 
+# JLCPCB solders the fine-pitch / hidden-pin parts (TAS5805M, USB-C) and the basic passives (nearly free once the
+# board is assembled anyway). The user solders the parts with visible leads that each cost 3.07 USD of feeder fee:
+# ESP32 modules (castellated), SOT-23 / TSSOP-8 ICs, inductors, electrolytic capacitor, speaker connector.
+HAND_REFS = frozenset({"U1", "U2", "U4", "U5", "U6", "U7", "U8", "U9", "L1", "L2", "L3", "L4", "C1", "J3"})
+
+
 def build_spec() -> BoardSpec:
     everything = ((-2.0, -2.0), (MAIN.length + 2.0, -2.0), (MAIN.length + 2.0, MAIN.width + 2.0), (-2.0, MAIN.width + 2.0))
-    parts = (_mcu() + _bluetooth() + _power_input() + _buck_5v() + _buck_3v3() + _usb() + _amplifier() + _mute()
-             + _link())
+    parts = [replace(part, hand=True) if part.ref in HAND_REFS else part
+             for part in (_mcu() + _bluetooth() + _power_input() + _buck_5v() + _buck_3v3() + _usb() + _amplifier()
+                          + _mute() + _link())]
     return BoardSpec(
         name="gh_mainboard",
         title="GH-Revive main board",

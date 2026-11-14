@@ -5,7 +5,7 @@ import math
 from pathlib import Path
 
 import pcbnew
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
 SCALE = 14.0  # pixels per millimetre
 LAYER_COLOURS = {"F.Cu": (200, 40, 40), "In1.Cu": (60, 160, 60), "In2.Cu": (200, 150, 30), "B.Cu": (50, 80, 220)}
@@ -91,6 +91,48 @@ def _edge_points(shape: pcbnew.PCB_SHAPE) -> list[pcbnew.VECTOR2I]:
     steps = max(2, int(abs(math.degrees(sweep)) / 2))
     return [pcbnew.VECTOR2I(int(centre.x + radius * math.cos(start + sweep * i / steps)),
                             int(centre.y + radius * math.sin(start + sweep * i / steps))) for i in range(steps + 1)]
+
+
+HAND_FILL, FACTORY_FILL, PAPER, INK = (240, 140, 30, 255), (175, 180, 186, 255), (250, 249, 246), (30, 30, 30, 255)
+
+
+def _footprint_polygons(footprint: pcbnew.FOOTPRINT, back: bool) -> list[pcbnew.SHAPE_POLY_SET]:
+    yard = footprint.GetCourtyard(pcbnew.B_CrtYd if back else pcbnew.F_CrtYd)
+    if yard.OutlineCount() > 0:
+        return [yard]
+    pads = []
+    for pad in footprint.Pads():
+        poly = pcbnew.SHAPE_POLY_SET()
+        pad.TransformShapeToPolygon(poly, pcbnew.B_Cu if back else pcbnew.F_Cu, 0, pcbnew.FromMM(0.02), pcbnew.ERROR_INSIDE)
+        pads.append(poly)
+    return pads
+
+
+def render_hand_map(board: pcbnew.BOARD, path: Path, parts: list[tuple[pcbnew.FOOTPRINT, bool]],
+                    show_back: bool = False) -> None:
+    """Soldering map of one face: parts to solder by hand in orange with their reference, factory parts in grey.
+
+    `parts` = (footprint, soldered by hand) of every bought part; only those of the drawn face are used.
+    The back face is mirrored, as seen when the board is turned over.
+    """
+    canvas = _Canvas(board)
+    canvas.image.paste(PAPER, (0, 0, canvas.image.width, canvas.image.height))
+    for drawing in board.GetDrawings():
+        if drawing.GetLayer() == pcbnew.Edge_Cuts and drawing.Type() == pcbnew.PCB_SHAPE_T:
+            canvas.draw.line([canvas.px(p) for p in _edge_points(drawing)], fill=INK, width=3)
+    side = pcbnew.B_Cu if show_back else pcbnew.F_Cu
+    parts = [(footprint, hand) for footprint, hand in parts if footprint.GetLayer() == side]
+    for footprint, hand in parts:
+        for poly in _footprint_polygons(footprint, show_back):
+            canvas.polygon(poly, HAND_FILL if hand else FACTORY_FILL, INK if hand else None)
+    image = canvas.image.transpose(Image.Transpose.FLIP_LEFT_RIGHT) if show_back else canvas.image
+    draw, font = ImageDraw.Draw(image, "RGBA"), ImageFont.load_default(size=22)
+    for footprint, hand in parts:
+        if hand:
+            x, y = canvas.px(footprint.GetPosition())
+            draw.text((image.width - x if show_back else x, y), footprint.GetReference(), fill=INK, font=font,
+                      anchor="mm", stroke_width=3, stroke_fill=PAPER)
+    image.save(str(path))
 
 
 def render_preview(board: pcbnew.BOARD, path: Path, show_back: bool = False) -> None:

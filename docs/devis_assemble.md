@@ -24,19 +24,19 @@
 | Radiographie (pieces sans pattes) | 9.84 | 8.46 |
 | Chargement de toutes les pieces (8 x 1.53 $) | 12.24 | 10.53 |
 | Emballage | 0.50 | 0.43 |
-| Composants (stock JLC) | 21.57 | 18.55 |
-| **Sous-total** | **112.14** | **96.44** |
+| Composants (stock JLC) | 22.13 | 19.03 |
+| **Sous-total** | **112.69** | **96.92** |
 
 ## Total
 
 | Poste | USD | EUR |
 |---|---:|---:|
-| Assemblage + composants (2 cartes x 2 jeux) | 211.99 | 182.31 |
+| Assemblage + composants (2 cartes x 2 jeux) | 212.55 | 182.79 |
 | PCB nus (5 de chaque, 2 couches) | 10.60 | 9.12 |
 | Coupon SMT mensuel JLC | -9.00 | -7.74 |
 | Livraison DHL Express (France) | 24.00 | 20.64 |
-| **Total HT** | **237.59** | **204.33** |
-| TVA 20 % (payee a la livraison) | 47.52 | 40.87 |
+| **Total HT** | **238.15** | **204.81** |
+| TVA 20 % (payee a la livraison) | 47.63 | 40.96 |
 | Frais de dedouanement transporteur | 13.95 | 12.00 |
-| **Total TTC** | **299.06** | **257.19** |
-| Soit par appareil (2 jeux) | 149.53 | 128.60 |
+| **Total TTC** | **299.73** | **257.77** |
+| Soit par appareil (2 jeux) | 149.86 | 128.88 |

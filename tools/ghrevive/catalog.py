@@ -19,10 +19,11 @@ L_4020 = "gh_revive:IND-SMD_L4.0-W4.0"
 TEST_PAD = "gh_revive:GH_TestPad_1.5mm"
 ELECTRODE_TAP = "gh_revive:GH_ElectrodeTap"
 WIRE_PADS_10 = "gh_revive:GH_WirePads_1x10_P2.54mm"
-LED_2020 = "gh_revive:LED-SMD_4P-L2.2-W2.0-P1.00_WS2815C-2020-4P"  # 1 DO, 2 GND, 3 DI, 4 VDD
+# 3.5 x 3.5 mm, J-leads outside the body (iron-solderable): 1 VDD, 2 DOUT, 3 GND, 4 DIN
+LED_MINI_V3J = "gh_revive:LED-SMD_4P-L3.5-W3.5-P1.80-LS6.2_WS2812B-MINI-V3J"
 MIC_IM69D130 = "gh_revive:GH_MIC_IM69D130"  # 1 DATA, 2 VDD, 3 CLK, 4 SELECT, 5 GND (seal ring)
 QFN20_MPR121 = "gh_revive:GH_QFN20_MPR121"
-LCSC_WS2812B_2020 = "C52917434"
+LCSC_WS2812B_MINI_V3J = "C22371519"
 LCSC_IM69D130 = "C536262"  # SNR 69 dB(A), AOP 130 dB SPL: >= the original InvenSense INMP621 (65 dB(A))
 LCSC_MPR121 = "C91322"
 LCSC_AHCT1G125 = "C7484"

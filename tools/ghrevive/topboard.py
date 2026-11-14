@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import math
 
-from .catalog import (ELECTRODE_TAP, LCSC_AHCT1G125, LCSC_IM69D130, LCSC_MPR121, LCSC_WS2812B_2020, LED_2020,
+from .catalog import (ELECTRODE_TAP, LCSC_AHCT1G125, LCSC_IM69D130, LCSC_MPR121, LCSC_WS2812B_MINI_V3J, LED_MINI_V3J,
                       MIC_IM69D130, QFN20_MPR121, SOT23_5, WIRE_PADS_10, cap, cap_22u, resistor, test_pad)
 from .mainboard import LINK_LABELS, LINK_PINS
 from .mechanical import TOP
@@ -16,7 +16,7 @@ from .model import Arc, BoardSpec, CopperZone, Keepout, NetClass, Part, Point, S
 
 SECTOR_START = -90.0  # first sector starts at 12 o'clock (component side view)
 FIRST_LED_ANGLE = 90.0  # D1 sits at 6 o'clock, next to the wire pads; chain runs clockwise (component side view)
-TAP_RADIUS = 15.0
+TAP_RADIUS = 15.6
 LEDS_PER_CAP = 2  # one 100 nF per 2 LEDs (+ 22 uF bulk at the wire pads)
 WIRE_PADS_Y = 24.0
 MIC_PORTS: tuple[Point, Point] = ((TOP.mic_radius, 0.0), (-TOP.mic_radius, 0.0))
@@ -166,11 +166,13 @@ def _leds() -> list[Part]:
     for i in range(TOP.led_count):
         angle = _led_angle(i)
         x, y = polar(TOP.led_radius, angle)
-        nets = {"2": "GND", "3": f"LED_D{i}", "4": "+5V"}
+        nets = {"1": "+5V", "3": "GND", "4": f"LED_D{i}"}
         if i + 1 < TOP.led_count:
-            nets["1"] = f"LED_D{i + 1}"
-        parts.append(Part(f"D{i + 1}", "WS2812B-2020", LED_2020, x, y, (-(angle + 90.0)) % 360, side="B", nets=nets,
-                          lcsc=LCSC_WS2812B_2020, note="Addressable RGB LED on the top face (towards the diffuser)"))
+            nets["2"] = f"LED_D{i + 1}"
+        # long axis (J-leads) radial so that 12 LEDs fit on the ring; soldered by the user (iron-friendly leads)
+        parts.append(Part(f"D{i + 1}", "WS2812B-MINI-V3J", LED_MINI_V3J, x, y, (90.0 - angle) % 360, side="B",
+                          nets=nets, lcsc=LCSC_WS2812B_MINI_V3J, hand=True,
+                          note="Addressable RGB LED on the top face (towards the diffuser), hand soldered"))
         if i % LEDS_PER_CAP == 0:  # sparser decoupling leaves routing gaps through the ring on 2 layers
             parts.append(cap(f"C{10 + i // LEDS_PER_CAP}", "100nF", x, y, (-angle) % 360, "+5V"))
     return parts
@@ -183,7 +185,7 @@ def _power_and_link() -> list[Part]:
              note="10 wires from the main board (same order as J4 on the main board)"),
         Part("U2", "SN74AHCT1G125DBVR", SOT23_5, 6.0, 19.5, 0, lcsc=LCSC_AHCT1G125,
              nets={"1": "GND", "2": "LED_DATA", "3": "GND", "4": "LED_D0", "5": "+5V"},
-             note="3.3 V -> 5 V level shifter for the LED data line"),
+             hand=True, note="3.3 V -> 5 V level shifter for the LED data line, hand soldered"),
         cap("C3", "100nF", 6.0, 16.6, 0, "+5V"),
         cap_22u("C4", -6.0, 19.5, 0, "+5V"),
         cap("C5", "1uF", -6.0, 17.2, 0, "+3V3"),
