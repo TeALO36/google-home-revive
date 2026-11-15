@@ -233,11 +233,16 @@ découvert automatiquement par l'intégration ESPHome de Home Assistant.
   plusieurs appareils cohabitent sans conflit. On les renomme ensuite dans Home Assistant (« Salon », « Chambre »).
 - **Une pièce par appareil** : assigner chaque appareil à sa pièce (« Zone » dans Home Assistant). « Jarvis, allume la
   lumière » allume alors la lumière de la pièce où se trouve l'appareil qui a répondu.
-- **Mot d'activation au choix, par appareil** : le firmware contient « Hey Jarvis » (actif par défaut), « Okay Nabu »
-  et « Hey Mycroft ». Le choix se fait dans Home Assistant, page de chaque appareil (« Mot d'activation »), sans
-  reflasher. Ce n'est pas un réglage global : chaque enceinte et le téléphone (application Android, Assist) se
-  règlent séparément. Un autre mot (« OK Google ») demande d'entraîner un modèle microWakeWord puis de l'ajouter dans
-  `micro_wake_word: models:`.
+- **Où se règle le mot d'activation** : réglage « Detection du mot d'activation » de chaque enceinte.
+  - « Sur l'appareil » (par défaut) : l'enceinte reconnaît elle-même « Hey Jarvis », « Okay Nabu » ou « Hey Mycroft » ;
+    le mot se choisit dans Home Assistant, page de l'appareil (« Mot d'activation »). Le micro ne part vers le serveur
+    qu'après le mot d'activation, et l'arbitrage de proximité ci-dessous fonctionne.
+  - « Dans Home Assistant » : c'est le moteur de mot d'activation du pipeline Assist qui décide (module openWakeWord à
+    installer, puis Paramètres > Assistants vocaux > Assist > mot d'activation). Le mot réglé dans Assist vaut pour
+    toutes les enceintes réglées ainsi, y compris un modèle personnalisé. En contrepartie, chaque enceinte envoie le
+    son du micro au serveur en continu, et l'arbitrage de proximité ne s'applique pas (Home Assistant garde la
+    première enceinte qui l'a entendu).
+  - Le téléphone se règle à part, dans l'application.
 - **L'enceinte la plus proche répond** : quand plusieurs enceintes entendent le mot d'activation, chacune envoie aux
   autres (UDP, port 18511, réseau local) le volume auquel elle l'a entendu, attend le « Delai d'arbitrage » (400 ms
   par défaut), et seule la plus forte démarre l'écoute. Dans une pièce ouverte avec mezzanine, l'enceinte de la

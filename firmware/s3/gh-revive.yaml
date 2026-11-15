@@ -62,7 +62,7 @@ api:
   encryption:
     key: !secret api_key
   on_client_connected:
-    - micro_wake_word.start:
+    - script.execute: wake_engine_start
   on_client_disconnected:
     - voice_assistant.stop:
 
@@ -242,6 +242,10 @@ globals:
   - id: pending_wake_word
     type: std::string
     restore_value: false
+  - id: va_active  # a request is being heard or answered (not just waiting for the wake word)
+    type: bool
+    restore_value: false
+    initial_value: "false"
 
 udp:
   id: arbiter_udp
@@ -303,6 +307,7 @@ voice_assistant:
   auto_gain: 31dBFS
   volume_multiplier: 2.0
   on_listening:
+    - lambda: id(va_active) = true;
     - mixer_speaker.apply_ducking:
         id: media_input
         decibel_reduction: 20
@@ -327,6 +332,7 @@ voice_assistant:
         id: ring
         effect: Reflexion
   on_end:
+    - lambda: id(va_active) = false;
     - wait_until:
         not:
           media_player.is_announcing: player
@@ -336,6 +342,7 @@ voice_assistant:
         duration: 1.0s
     - script.execute: led_idle
   on_error:
+    - lambda: id(va_active) = false;
     # Several devices (or the phone) heard the same wake word: Home Assistant keeps the first one that streamed and
     # answers the others with duplicate_wake_up_detected. The losers go back to idle silently.
     - if:
@@ -369,6 +376,52 @@ output:
     pin: GPIO1
 
 script:
+  # Wake word detection runs either on the device (microWakeWord, nearest-device arbitration) or in Home Assistant
+  # (the wake word engine of the Assist pipeline, e.g. openWakeWord: any word set in Assist, audio streamed
+  # continuously to the server). Chosen with the "Detection du mot d'activation" select.
+  - id: wake_engine_start
+    mode: restart
+    then:
+      - if:
+          condition:
+            or:
+              - binary_sensor.is_on: mute_state
+              - not:
+                  api.connected:
+          then:
+            - logger.log: "Muted or Home Assistant not connected: wake word detection waits"
+          else:
+            - if:
+                condition:
+                  lambda: return id(wake_engine).current_option() == std::string("Dans Home Assistant");
+                then:
+                  - micro_wake_word.stop:
+                  - lambda: id(va).set_use_wake_word(true);
+                  - wait_until:
+                      condition:
+                        not:
+                          voice_assistant.is_running:
+                      timeout: 2s
+                  - voice_assistant.start_continuous:
+                else:
+                  - lambda: id(va).set_use_wake_word(false);
+                  - micro_wake_word.start:
+
+  - id: wake_engine_stop
+    mode: restart
+    then:
+      - lambda: id(va_active) = false;
+      - micro_wake_word.stop:
+      - voice_assistant.stop:
+
+  - id: wake_engine_restart
+    mode: restart
+    then:
+      - script.execute: wake_engine_stop
+      - delay: 300ms
+      - script.execute: wake_engine_start
+      - script.execute: led_idle
+
   # Every speaker that heard the wake word broadcasts how loud it heard it, waits for the others, and only the
   # loudest one starts the pipeline. The wait also leaves a phone that heard the wake word time to win.
   - id: wake_arbitrate
@@ -523,9 +576,9 @@ script:
           then:
             - if:
                 condition:
-                  voice_assistant.is_running:
+                  lambda: return id(va_active);
                 then:
-                  - voice_assistant.stop:
+                  - script.execute: wake_engine_restart
                 else:
                   - media_player.toggle: player
                   - homeassistant.event:
@@ -616,11 +669,10 @@ binary_sensor:
     name: Micros coupes
     pin: GPIO7  # 1 = muted by the hardware switch (PDM clock gated)
     on_press:
-      - micro_wake_word.stop:
-      - voice_assistant.stop:
+      - script.execute: wake_engine_stop
       - script.execute: led_idle
     on_release:
-      - micro_wake_word.start:
+      - script.execute: wake_engine_start
       - script.execute: led_idle
   - platform: gpio
     id: amp_fault
@@ -724,6 +776,16 @@ binary_sensor:
               }
 
 select:
+  - platform: template
+    id: wake_engine
+    name: Detection du mot d'activation
+    entity_category: config
+    options: ["Sur l'appareil", "Dans Home Assistant"]
+    initial_option: "Sur l'appareil"
+    optimistic: true
+    restore_value: true
+    on_value:
+      - script.execute: wake_engine_restart
   # With several devices in the house, lowering the sensitivity of the one that answers too often from afar
   # lets the closest device win the wake word.
   - platform: template
