@@ -224,6 +224,25 @@ Si l'S3 n'est pas détecté, maintenir la pastille TP2 (BOOT) à la masse en bra
 - **WEP** : non pris en charge. La pile Wi-Fi de l'ESP32 ne gère que WPA, WPA2 et WPA3 ; le WEP est cassable en
   quelques minutes et absent des box récentes. Passer la box en WPA2.
 
+### Plusieurs appareils dans la maison
+
+Aucune intégration Home Assistant spécifique n'est nécessaire : chaque appareil est un appareil ESPHome standard,
+découvert automatiquement par l'intégration ESPHome de Home Assistant.
+
+- **Même firmware pour tous** : le nom reçoit automatiquement la fin de l'adresse MAC (`gh-revive-a1b2c3`), donc
+  plusieurs appareils cohabitent sans conflit. On les renomme ensuite dans Home Assistant (« Salon », « Chambre »).
+- **Une pièce par appareil** : assigner chaque appareil à sa pièce (« Zone » dans Home Assistant). « Jarvis, allume la
+  lumière » allume alors la lumière de la pièce où se trouve l'appareil qui a répondu.
+- **Pas de double exécution** : si plusieurs appareils (ou le téléphone, avec le mot d'activation de l'application
+  Android) entendent « Hey Jarvis » en même temps, Home Assistant ne garde que le premier qui lui envoie le son et
+  refuse les autres (`duplicate_wake_up_detected`). Une commande n'est exécutée qu'une fois. Sur les appareils
+  écartés, l'anneau s'éteint simplement, sans signal d'erreur.
+- **Limite** : le gagnant est le plus rapide, pas forcément le plus proche (la latence Wi-Fi compte aussi). Si le
+  mauvais appareil répond souvent, régler « Sensibilite mot d'activation » sur « Faible » pour cet appareil (réglage
+  dans Home Assistant, conservé après redémarrage).
+- Configurer les appareils un par un : tant qu'ils ne sont pas connectés, ils ouvrent tous le même point d'accès
+  « GH-Revive Setup ».
+
 ### Module Bluetooth (PlatformIO)
 
 Le module Bluetooth n'a pas de port USB : l'S3 sert de pont USB-C vers le module le temps de le programmer.
