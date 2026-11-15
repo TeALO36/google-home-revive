@@ -25,6 +25,7 @@ esphome:
   includes:
     - ring_gesture.h
     - ip_speech.h
+    - wake_arbiter.h
   on_boot:
     - priority: 600
       then:
@@ -32,6 +33,11 @@ esphome:
         - output.turn_on: bt_boot
     - priority: -100
       then:
+        - lambda: |-
+            uint8_t mac[6];
+            get_mac_address_raw(mac);
+            const uint32_t device_id = (static_cast<uint32_t>(mac[3]) << 16) | (static_cast<uint32_t>(mac[4]) << 8) | mac[5];
+            wake_arbiter::arbiter().set_device_id(device_id);
         - script.execute: amp_start
         - script.execute: led_idle
 
@@ -217,12 +223,76 @@ micro_wake_word:
   id: mww
   microphone: mic
   stop_after_detection: false
+  # Home Assistant shows a "Wake word" choice on the device page listing these models; only the first one is active
+  # until another is picked there (the choice is stored on the device). Each device and the phone are set separately.
   models:
     - model: hey_jarvis
       id: jarvis_model
+    - model: okay_nabu
+      id: nabu_model
+    - model: hey_mycroft
+      id: mycroft_model
   on_wake_word_detected:
-    - voice_assistant.start:
-        wake_word: !lambda return wake_word;
+    - lambda: id(pending_wake_word) = wake_word;
+    - script.execute: wake_arbitrate
+
+# ------------------------------------------------------------------ nearest-device arbitration (wake_arbiter.h)
+
+globals:
+  - id: pending_wake_word
+    type: std::string
+    restore_value: false
+
+udp:
+  id: arbiter_udp
+  port: 18511  # broadcast on the local network; every GH-Revive listens on the same port
+  on_receive:
+    - lambda: |-
+        wake_arbiter::Claim claim;
+        if (wake_arbiter::decode(data.data(), data.size(), claim)) {
+          wake_arbiter::arbiter().peer(claim, millis());
+        }
+
+sensor:
+  - platform: sound_level
+    microphone: mic
+    passive: true  # only measures while the wake word engine already runs the microphone
+    measurement_duration: 100ms
+    rms:
+      id: mic_level
+      internal: true
+      on_value:
+        - lambda: wake_arbiter::loudness().add(x, millis());
+  - platform: template
+    id: wake_level
+    name: Niveau dernier mot d'activation
+    unit_of_measurement: dB
+    accuracy_decimals: 1
+    entity_category: diagnostic
+
+number:
+  - platform: template
+    id: arbiter_window
+    name: Delai d'arbitrage
+    entity_category: config
+    unit_of_measurement: ms
+    min_value: 150
+    max_value: 1500
+    step: 50
+    initial_value: 400
+    optimistic: true
+    restore_value: true
+  - platform: template
+    id: level_offset
+    name: Correction niveau micro
+    entity_category: config
+    unit_of_measurement: dB
+    min_value: -15
+    max_value: 15
+    step: 0.5
+    initial_value: 0
+    optimistic: true
+    restore_value: true
 
 voice_assistant:
   id: va
@@ -244,6 +314,14 @@ voice_assistant:
         green: 40%
         blue: 100%
         effect: Ecoute
+  on_stt_end:
+    - text_sensor.template.publish:
+        id: last_request
+        state: !lambda return x;
+  on_tts_start:
+    - text_sensor.template.publish:
+        id: last_answer
+        state: !lambda return x;
   on_stt_vad_end:
     - light.turn_on:
         id: ring
@@ -291,6 +369,36 @@ output:
     pin: GPIO1
 
 script:
+  # Every speaker that heard the wake word broadcasts how loud it heard it, waits for the others, and only the
+  # loudest one starts the pipeline. The wait also leaves a phone that heard the wake word time to win.
+  - id: wake_arbitrate
+    mode: restart
+    then:
+      - lambda: |-
+          const uint32_t now = millis();
+          const float level = wake_arbiter::loudness().recent_max(now) + id(level_offset).state;
+          const wake_arbiter::Claim claim = wake_arbiter::arbiter().claim(level, now);
+          id(wake_level).publish_state(claim.level_ddb / 10.0f);
+      - udp.write:
+          id: arbiter_udp
+          data: !lambda return wake_arbiter::encode(wake_arbiter::arbiter().last_claim());
+      - delay: 40ms
+      - udp.write:
+          id: arbiter_udp
+          data: !lambda return wake_arbiter::encode(wake_arbiter::arbiter().last_claim());
+      - wait_until:
+          condition:
+            lambda: return wake_arbiter::arbiter().already_lost(millis());
+          timeout: !lambda return static_cast<uint32_t>(id(arbiter_window).state);
+      - if:
+          condition:
+            lambda: return wake_arbiter::arbiter().decide(millis()) == wake_arbiter::Verdict::Won;
+          then:
+            - voice_assistant.start:
+                wake_word: !lambda return id(pending_wake_word);
+          else:
+            - logger.log: "Wake word left to a closer device"
+
   - id: amp_start
     mode: restart
     then:
@@ -628,15 +736,17 @@ select:
     restore_value: true
     on_value:
       - lambda: |-
-          const uint8_t base = id(jarvis_model)->get_default_probability_cutoff();
-          uint8_t cutoff = base;  // "Normale": model default
-          if (x == "Faible") {
-            cutoff = static_cast<uint8_t>(base + (255 - base) / 2);  // stricter: needs a clearer "Hey Jarvis"
-          } else if (x == "Forte") {
-            cutoff = static_cast<uint8_t>(base > 25 ? base - 25 : 0);
+          for (auto *model : {id(jarvis_model), id(nabu_model), id(mycroft_model)}) {
+            const uint8_t base = model->get_default_probability_cutoff();
+            uint8_t cutoff = base;  // "Normale": model default
+            if (x == "Faible") {
+              cutoff = static_cast<uint8_t>(base + (255 - base) / 2);  // stricter: needs a clearer wake word
+            } else if (x == "Forte") {
+              cutoff = static_cast<uint8_t>(base > 25 ? base - 25 : 0);
+            }
+            model->set_probability_cutoff(cutoff);
+            ESP_LOGI("wake", "Wake word sensitivity %s (cutoff %u / 255)", x.c_str(), cutoff);
           }
-          id(jarvis_model)->set_probability_cutoff(cutoff);
-          ESP_LOGI("wake", "Wake word sensitivity %s (cutoff %u / 255)", x.c_str(), cutoff);
 
 switch:
   - platform: gpio
@@ -648,6 +758,13 @@ switch:
     restore_mode: ALWAYS_OFF
 
 text_sensor:
+  # What the speaker understood and answered, readable in the HA app (device page or a dashboard card)
+  - platform: template
+    id: last_request
+    name: Derniere demande
+  - platform: template
+    id: last_answer
+    name: Derniere reponse
   - platform: template
     id: bt_status
     name: Bluetooth etat

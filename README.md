@@ -233,13 +233,27 @@ découvert automatiquement par l'intégration ESPHome de Home Assistant.
   plusieurs appareils cohabitent sans conflit. On les renomme ensuite dans Home Assistant (« Salon », « Chambre »).
 - **Une pièce par appareil** : assigner chaque appareil à sa pièce (« Zone » dans Home Assistant). « Jarvis, allume la
   lumière » allume alors la lumière de la pièce où se trouve l'appareil qui a répondu.
-- **Pas de double exécution** : si plusieurs appareils (ou le téléphone, avec le mot d'activation de l'application
-  Android) entendent « Hey Jarvis » en même temps, Home Assistant ne garde que le premier qui lui envoie le son et
-  refuse les autres (`duplicate_wake_up_detected`). Une commande n'est exécutée qu'une fois. Sur les appareils
-  écartés, l'anneau s'éteint simplement, sans signal d'erreur.
-- **Limite** : le gagnant est le plus rapide, pas forcément le plus proche (la latence Wi-Fi compte aussi). Si le
-  mauvais appareil répond souvent, régler « Sensibilite mot d'activation » sur « Faible » pour cet appareil (réglage
-  dans Home Assistant, conservé après redémarrage).
+- **Mot d'activation au choix, par appareil** : le firmware contient « Hey Jarvis » (actif par défaut), « Okay Nabu »
+  et « Hey Mycroft ». Le choix se fait dans Home Assistant, page de chaque appareil (« Mot d'activation »), sans
+  reflasher. Ce n'est pas un réglage global : chaque enceinte et le téléphone (application Android, Assist) se
+  règlent séparément. Un autre mot (« OK Google ») demande d'entraîner un modèle microWakeWord puis de l'ajouter dans
+  `micro_wake_word: models:`.
+- **L'enceinte la plus proche répond** : quand plusieurs enceintes entendent le mot d'activation, chacune envoie aux
+  autres (UDP, port 18511, réseau local) le volume auquel elle l'a entendu, attend le « Delai d'arbitrage » (400 ms
+  par défaut), et seule la plus forte démarre l'écoute. Dans une pièce ouverte avec mezzanine, l'enceinte de la
+  chambre répond quand on parle depuis le lit. « Niveau dernier mot d'activation » (diagnostic) montre le volume
+  mesuré ; « Correction niveau micro » (±15 dB) compense une enceinte posée dans un coin ou derrière un objet.
+- **Le téléphone en main est prioritaire** : le téléphone ne participe pas à l'arbitrage, mais il envoie le son à Home
+  Assistant dès qu'il entend le mot d'activation, pendant que les enceintes attendent encore. Home Assistant garde le
+  premier arrivé : si le téléphone a entendu, c'est lui qui répond et affiche le texte compris. Si le téléphone gagne
+  trop rarement, augmenter le « Delai d'arbitrage » (jusqu'à 1,5 s, réponse un peu plus lente).
+- **Pas de double exécution** : Home Assistant refuse tout second démarrage pour le même mot d'activation
+  (`duplicate_wake_up_detected`), ce qui couvre aussi une annonce UDP perdue. Une commande n'est exécutée qu'une fois.
+  Sur les appareils écartés, l'anneau reste éteint, sans signal d'erreur.
+- **Texte compris et réponse** : « Derniere demande » et « Derniere reponse » affichent dans l'application Home
+  Assistant ce que l'enceinte a compris et répondu (page de l'appareil ou carte de tableau de bord).
+- **Sensibilité** : « Sensibilite mot d'activation » (Faible / Normale / Forte) règle chaque appareil, pour tous les
+  modèles.
 - Configurer les appareils un par un : tant qu'ils ne sont pas connectés, ils ouvrent tous le même point d'accès
   « GH-Revive Setup ».
 
@@ -259,6 +273,7 @@ esphome run ../s3/gh-revive.yaml                  # remet le firmware principal 
 ```bash
 g++ -std=c++17 -Wall -Wextra -Werror -I firmware/s3 firmware/tests/test_ring_gesture.cpp -o test_ring && ./test_ring
 g++ -std=c++17 -Wall -Wextra -Werror -I firmware/s3 firmware/tests/test_ip_speech.cpp -o test_ip && ./test_ip
+g++ -std=c++17 -Wall -Wextra -Werror -I firmware/s3 firmware/tests/test_wake_arbiter.cpp -o test_arbiter && ./test_arbiter
 ```
 
 ### État du firmware
